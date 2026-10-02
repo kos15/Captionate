@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import AppKit
 import QuartzCore
+import CoreText
 
 enum VideoExportError: LocalizedError {
     case noVideoTrack
@@ -154,56 +155,71 @@ enum CaptionLayers {
         return caption(words, highlight: nil, style: style, fontSize: fontSize, renderSize: renderSize)
     }
 
-    /// Returns the caption text and the character range of the highlighted word.
+    /// Returns the caption text (Core Text attributes) and the range of the highlighted word.
+    /// Core Text only reads its own keys: an AppKit `.foregroundColor` NSColor is ignored and the
+    /// text comes out black — invisible on the default black box.
     static func attributed(_ words: [String], highlight: Int?, style: CaptionStyle,
                            fontSize: CGFloat) -> (text: NSAttributedString, highlightRange: NSRange?) {
-        let para = NSMutableParagraphStyle()
-        para.alignment = .center
-        para.lineBreakMode = .byWordWrapping
-        let font = style.nsFont(size: fontSize)
-        let normal = NSColor(style.textColor)
-        let hi = style.wordHighlight ? NSColor(style.highlightColor) : normal
+        var alignment = CTTextAlignment.center
+        let para = withUnsafeBytes(of: &alignment) { buf in
+            var setting = CTParagraphStyleSetting(spec: .alignment, valueSize: buf.count, value: buf.baseAddress!)
+            return CTParagraphStyleCreate(&setting, 1)
+        }
+        let font = style.nsFont(size: fontSize) as CTFont
+        let normal = style.textColor.cgColorValue
+        let hi = style.wordHighlight ? style.highlightColor.cgColorValue : normal
+        func attrs(_ color: CGColor) -> [NSAttributedString.Key: Any] {
+            [NSAttributedString.Key(kCTFontAttributeName as String): font,
+             NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
+             NSAttributedString.Key(kCTParagraphStyleAttributeName as String): para]
+        }
 
         let result = NSMutableAttributedString()
         var range: NSRange?
         for (i, w) in words.enumerated() {
-            if i > 0 {
-                result.append(NSAttributedString(string: " ", attributes: [.font: font, .paragraphStyle: para]))
-            }
-            let word = NSAttributedString(string: style.displayText(w), attributes: [
-                .font: font,
-                .foregroundColor: i == highlight ? hi : normal,
-                .paragraphStyle: para,
-            ])
+            if i > 0 { result.append(NSAttributedString(string: " ", attributes: attrs(normal))) }
+            let word = NSAttributedString(string: style.displayText(w), attributes: attrs(i == highlight ? hi : normal))
             if i == highlight { range = NSRange(location: result.length, length: word.length) }
             result.append(word)
         }
         return (result, range)
     }
 
-    /// Where `range` sits inside text laid out at `width` (top-left origin).
-    private static func rect(of range: NSRange, in text: NSAttributedString, width: CGFloat) -> CGRect {
-        let storage = NSTextStorage(attributedString: text)
-        let container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
-        container.lineFragmentPadding = 0
-        let layout = NSLayoutManager()
-        layout.addTextContainer(container)
-        storage.addLayoutManager(layout)
-        let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-        return layout.boundingRect(forGlyphRange: glyphs, in: container)
+    /// Bounds of `range` inside a laid-out frame (bottom-left origin, frame coordinates).
+    private static func rect(of range: NSRange, in frame: CTFrame) -> CGRect? {
+        let lines = CTFrameGetLines(frame) as! [CTLine]
+        var origins = [CGPoint](repeating: .zero, count: lines.count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+        for (line, origin) in zip(lines, origins) {
+            let lr = CTLineGetStringRange(line)
+            let lo = max(range.location, lr.location)
+            let hi = min(range.location + range.length, lr.location + lr.length)
+            guard hi > lo else { continue }
+            var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+            CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+            let x0 = CTLineGetOffsetForStringIndex(line, lo, nil)
+            let x1 = CTLineGetOffsetForStringIndex(line, hi, nil)
+            return CGRect(x: origin.x + x0, y: origin.y - descent, width: x1 - x0, height: ascent + descent)
+        }
+        return nil
     }
 
-    /// A positioned caption box (always visible).
+    /// A positioned caption box (always visible), drawn into a bitmap with Core Text.
+    /// Bitmap contents render reliably in AVVideoCompositionCoreAnimationTool, unlike CATextLayer.
     private static func caption(_ words: [String], highlight: Int?, style: CaptionStyle,
                                 fontSize: CGFloat, renderSize: CGSize) -> CALayer {
         let (text, highlightRange) = attributed(words, highlight: highlight, style: style, fontSize: fontSize)
+        let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)
         let maxTextWidth = renderSize.width * CGFloat(style.maxWidth)
-        let bounds = text.boundingRect(with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude),
-                                       options: [.usesLineFragmentOrigin, .usesFontLeading])
-        let textSize = CGSize(width: ceil(bounds.width) + 2, height: ceil(bounds.height) + 2)
+        let fit = CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter, CFRange(location: 0, length: 0), nil,
+            CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude), nil)
+        let textSize = CGSize(width: ceil(fit.width) + 2, height: ceil(fit.height) + 2)
+        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0),
+                                             CGPath(rect: CGRect(origin: .zero, size: textSize), transform: nil), nil)
+
         let padX = fontSize * 0.35, padY = fontSize * 0.2
         let boxSize = CGSize(width: textSize.width + padX * 2, height: textSize.height + padY * 2)
-
         let margin = renderSize.height * CGFloat(style.verticalMargin)
         let y: CGFloat
         switch style.position {
@@ -211,46 +227,55 @@ enum CaptionLayers {
         case .middle: y = (renderSize.height - boxSize.height) / 2
         case .top: y = renderSize.height - margin - boxSize.height
         }
+        let boxFrame = CGRect(x: (renderSize.width - boxSize.width) / 2, y: y,
+                              width: boxSize.width, height: boxSize.height)
 
-        let container = CALayer()
-        container.frame = CGRect(x: (renderSize.width - boxSize.width) / 2, y: y,
-                                 width: boxSize.width, height: boxSize.height)
+        // Extra room around the box so the text shadow isn't clipped.
+        let bleed = ceil(fontSize * 0.3)
+        let scale: CGFloat = 2
+        let canvas = CGSize(width: boxSize.width + bleed * 2, height: boxSize.height + bleed * 2)
+        let layer = CALayer()
+        layer.frame = boxFrame.insetBy(dx: -bleed, dy: -bleed)
+        guard let ctx = CGContext(data: nil,
+                                  width: Int(ceil(canvas.width * scale)),
+                                  height: Int(ceil(canvas.height * scale)),
+                                  bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return layer }
+        ctx.scaleBy(x: scale, y: scale)
+        ctx.translateBy(x: bleed, y: bleed)
+
         if style.showBackground {
-            container.backgroundColor = NSColor(style.backgroundColor)
-                .withAlphaComponent(style.backgroundOpacity).cgColor
-            container.cornerRadius = fontSize * 0.25
+            ctx.addPath(CGPath(roundedRect: CGRect(origin: .zero, size: boxSize),
+                               cornerWidth: fontSize * 0.25, cornerHeight: fontSize * 0.25, transform: nil))
+            ctx.setFillColor(style.backgroundColor.cgColorValue.copy(alpha: style.backgroundOpacity)
+                             ?? CGColor(gray: 0, alpha: style.backgroundOpacity))
+            ctx.fillPath()
         }
 
-        // Rounded box behind the active word. Layers use a bottom-left origin, text layout top-left.
-        if style.wordBackground, let range = highlightRange {
-            let r = rect(of: range, in: text, width: textSize.width)
-            if !r.isEmpty {
-                let insetX = fontSize * 0.14, insetY = fontSize * 0.02
-                let word = CALayer()
-                word.frame = CGRect(x: padX + r.minX - insetX,
-                                    y: padY + textSize.height - r.maxY - insetY,
-                                    width: r.width + insetX * 2,
-                                    height: r.height + insetY * 2)
-                word.backgroundColor = NSColor(style.wordBackgroundColor).cgColor
-                word.cornerRadius = fontSize * 0.18
-                container.addSublayer(word)
-            }
+        if style.wordBackground, let range = highlightRange, let r = rect(of: range, in: frame), !r.isEmpty {
+            let insetX = fontSize * 0.14, insetY = fontSize * 0.06
+            let box = CGRect(x: padX + r.minX - insetX, y: padY + r.minY - insetY,
+                             width: r.width + insetX * 2, height: r.height + insetY * 2)
+            ctx.addPath(CGPath(roundedRect: box, cornerWidth: fontSize * 0.18,
+                               cornerHeight: fontSize * 0.18, transform: nil))
+            ctx.setFillColor(style.wordBackgroundColor.cgColorValue)
+            ctx.fillPath()
         }
 
-        let textLayer = CATextLayer()
-        textLayer.frame = CGRect(x: padX, y: padY, width: textSize.width, height: textSize.height)
-        textLayer.string = text
-        textLayer.isWrapped = true
-        textLayer.alignmentMode = .center
-        textLayer.contentsScale = 2
+        ctx.saveGState()
         if style.showShadow {
-            textLayer.shadowColor = NSColor.black.cgColor
-            textLayer.shadowOpacity = 0.85
-            textLayer.shadowRadius = fontSize * 0.08
-            textLayer.shadowOffset = CGSize(width: 0, height: -fontSize * 0.04)
+            ctx.setShadow(offset: CGSize(width: 0, height: -fontSize * 0.04), blur: fontSize * 0.16,
+                          color: CGColor(gray: 0, alpha: 0.85))
         }
-        container.addSublayer(textLayer)
-        return container
+        ctx.translateBy(x: padX, y: padY)
+        ctx.textMatrix = .identity
+        CTFrameDraw(frame, ctx)
+        ctx.restoreGState()
+
+        layer.contents = ctx.makeImage()
+        layer.contentsScale = scale
+        return layer
     }
 
     /// Hidden by default; visible only during [start, end) of the export timeline.
