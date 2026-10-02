@@ -54,6 +54,8 @@ struct CaptionStyle {
     var uppercase: Bool = false
     var wordHighlight: Bool = false        // karaoke-style active word colour
     var highlightColor: Color = Color(red: 1.0, green: 0.82, blue: 0.1)
+    var wordBackground: Bool = false       // box behind the active word (independent of wordHighlight)
+    var wordBackgroundColor: Color = Color(red: 0.49, green: 0.3, blue: 1.0)
     var position: CaptionPosition = .bottom
     var verticalMargin: Double = 0.08      // fraction of video height
     var maxWidth: Double = 0.85            // fraction of video width
@@ -67,6 +69,9 @@ struct CaptionStyle {
     }
 
     func displayText(_ s: String) -> String { uppercase ? s.uppercased() : s }
+
+    /// True when captions must track the active word (text colour and/or box).
+    var tracksActiveWord: Bool { wordHighlight || wordBackground }
 }
 
 /// How words are grouped into captions.

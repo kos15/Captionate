@@ -212,6 +212,14 @@ final class AppState: ObservableObject {
             s.wordHighlight = true
             s.position = .middle
             grouping = .shortForm
+        case "WordBox":
+            s.fontName = "Avenir Next"
+            s.fontScale = 0.065
+            s.showBackground = false
+            s.uppercase = true
+            s.wordBackground = true
+            s.position = .middle
+            grouping = .shortForm
         case "Minimal":
             s.fontScale = 0.045
             s.bold = false

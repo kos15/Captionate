@@ -1,0 +1,46 @@
+name: Build DMG
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Sources/**"
+      - "Resources/**"
+      - "Package.swift"
+      - "build.sh"
+  workflow_dispatch:
+    inputs:
+      background:
+        description: "DMG background (dots, grid, diagonal, waves)"
+        default: dots
+        type: choice
+        options: [dots, grid, diagonal, waves]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app and DMG
+        env:
+          DMG_BACKGROUND: ${{ inputs.background || 'dots' }}
+        run: ./build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Captionate.dmg
+          path: build/Captionate.dmg
+
+      - name: Commit the fresh DMG (served by the website's Download button)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add build/Captionate.dmg build/Captionate.app
+          git diff --cached --quiet && exit 0
+          git commit -m "Rebuild Captionate.dmg [skip ci]"
+          git push

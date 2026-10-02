@@ -113,58 +113,90 @@ enum VideoExporter {
     }
 }
 
-/// Builds timed caption layers. Shared logic mirrors the SwiftUI preview.
+/// Builds caption layers. Used by both the export and the live preview, so they match exactly.
 enum CaptionLayers {
+    /// Timed layers for the whole video (export).
     static func make(segments: [CaptionSegment], style: CaptionStyle, renderSize: CGSize) -> [CALayer] {
         let fontSize = CGFloat(style.fontScale) * renderSize.height
         var layers: [CALayer] = []
 
         for seg in segments where seg.end > seg.start {
             let tokens = seg.timedWords()
-            if style.wordHighlight && !tokens.isEmpty {
-                // One layer per active word: the full line with that word coloured.
+            if style.tracksActiveWord && !tokens.isEmpty {
+                // One layer per active word: the full line with that word highlighted.
                 for (i, w) in tokens.enumerated() {
                     let start = i == 0 ? seg.start : w.start
                     let end = i == tokens.count - 1 ? seg.end : tokens[i + 1].start
                     guard end > start else { continue }
-                    let text = attributed(tokens.map(\.text), highlight: i, style: style, fontSize: fontSize)
-                    layers.append(box(text, style: style, fontSize: fontSize, renderSize: renderSize,
-                                      start: start, end: end))
+                    let layer = caption(tokens.map(\.text), highlight: i, style: style,
+                                        fontSize: fontSize, renderSize: renderSize)
+                    layers.append(timed(layer, start: start, end: end))
                 }
             } else {
                 let words = seg.text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-                let text = attributed(words, highlight: nil, style: style, fontSize: fontSize)
-                layers.append(box(text, style: style, fontSize: fontSize, renderSize: renderSize,
-                                  start: seg.start, end: seg.end))
+                let layer = caption(words, highlight: nil, style: style, fontSize: fontSize, renderSize: renderSize)
+                layers.append(timed(layer, start: seg.start, end: seg.end))
             }
         }
         return layers
     }
 
-    static func attributed(_ words: [String], highlight: Int?, style: CaptionStyle, fontSize: CGFloat) -> NSAttributedString {
+    /// The caption as it looks at `time` (live preview).
+    static func still(segment: CaptionSegment, time: Double, style: CaptionStyle, renderSize: CGSize) -> CALayer {
+        let fontSize = CGFloat(style.fontScale) * renderSize.height
+        let tokens = segment.timedWords()
+        if style.tracksActiveWord && !tokens.isEmpty {
+            let active = tokens.lastIndex { $0.start <= time } ?? 0
+            return caption(tokens.map(\.text), highlight: active, style: style,
+                           fontSize: fontSize, renderSize: renderSize)
+        }
+        let words = segment.text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        return caption(words, highlight: nil, style: style, fontSize: fontSize, renderSize: renderSize)
+    }
+
+    /// Returns the caption text and the character range of the highlighted word.
+    static func attributed(_ words: [String], highlight: Int?, style: CaptionStyle,
+                           fontSize: CGFloat) -> (text: NSAttributedString, highlightRange: NSRange?) {
         let para = NSMutableParagraphStyle()
         para.alignment = .center
         para.lineBreakMode = .byWordWrapping
         let font = style.nsFont(size: fontSize)
         let normal = NSColor(style.textColor)
-        let hi = NSColor(style.highlightColor)
+        let hi = style.wordHighlight ? NSColor(style.highlightColor) : normal
 
         let result = NSMutableAttributedString()
+        var range: NSRange?
         for (i, w) in words.enumerated() {
             if i > 0 {
                 result.append(NSAttributedString(string: " ", attributes: [.font: font, .paragraphStyle: para]))
             }
-            result.append(NSAttributedString(string: style.displayText(w), attributes: [
+            let word = NSAttributedString(string: style.displayText(w), attributes: [
                 .font: font,
                 .foregroundColor: i == highlight ? hi : normal,
                 .paragraphStyle: para,
-            ]))
+            ])
+            if i == highlight { range = NSRange(location: result.length, length: word.length) }
+            result.append(word)
         }
-        return result
+        return (result, range)
     }
 
-    private static func box(_ text: NSAttributedString, style: CaptionStyle, fontSize: CGFloat,
-                            renderSize: CGSize, start: Double, end: Double) -> CALayer {
+    /// Where `range` sits inside text laid out at `width` (top-left origin).
+    private static func rect(of range: NSRange, in text: NSAttributedString, width: CGFloat) -> CGRect {
+        let storage = NSTextStorage(attributedString: text)
+        let container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        let layout = NSLayoutManager()
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+        let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        return layout.boundingRect(forGlyphRange: glyphs, in: container)
+    }
+
+    /// A positioned caption box (always visible).
+    private static func caption(_ words: [String], highlight: Int?, style: CaptionStyle,
+                                fontSize: CGFloat, renderSize: CGSize) -> CALayer {
+        let (text, highlightRange) = attributed(words, highlight: highlight, style: style, fontSize: fontSize)
         let maxTextWidth = renderSize.width * CGFloat(style.maxWidth)
         let bounds = text.boundingRect(with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude),
                                        options: [.usesLineFragmentOrigin, .usesFontLeading])
@@ -189,6 +221,22 @@ enum CaptionLayers {
             container.cornerRadius = fontSize * 0.25
         }
 
+        // Rounded box behind the active word. Layers use a bottom-left origin, text layout top-left.
+        if style.wordBackground, let range = highlightRange {
+            let r = rect(of: range, in: text, width: textSize.width)
+            if !r.isEmpty {
+                let insetX = fontSize * 0.14, insetY = fontSize * 0.02
+                let word = CALayer()
+                word.frame = CGRect(x: padX + r.minX - insetX,
+                                    y: padY + textSize.height - r.maxY - insetY,
+                                    width: r.width + insetX * 2,
+                                    height: r.height + insetY * 2)
+                word.backgroundColor = NSColor(style.wordBackgroundColor).cgColor
+                word.cornerRadius = fontSize * 0.18
+                container.addSublayer(word)
+            }
+        }
+
         let textLayer = CATextLayer()
         textLayer.frame = CGRect(x: padX, y: padY, width: textSize.width, height: textSize.height)
         textLayer.string = text
@@ -202,16 +250,19 @@ enum CaptionLayers {
             textLayer.shadowOffset = CGSize(width: 0, height: -fontSize * 0.04)
         }
         container.addSublayer(textLayer)
+        return container
+    }
 
-        // Hidden by default; visible only during [start, end).
-        container.opacity = 0
+    /// Hidden by default; visible only during [start, end) of the export timeline.
+    private static func timed(_ layer: CALayer, start: Double, end: Double) -> CALayer {
+        layer.opacity = 0
         let show = CABasicAnimation(keyPath: "opacity")
         show.fromValue = 1
         show.toValue = 1
         show.beginTime = start <= 0 ? AVCoreAnimationBeginTimeAtZero : start
         show.duration = end - start
         show.isRemovedOnCompletion = false
-        container.add(show, forKey: "visibility")
-        return container
+        layer.add(show, forKey: "visibility")
+        return layer
     }
 }
