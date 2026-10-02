@@ -9,8 +9,8 @@ Native macOS app that captions your videos — fully on-device, free, no uploads
 - Editable caption list — fix words, nudge timings, add/delete, click to seek
 - Live preview that matches the export exactly
 - Styles: any installed font, bold, UPPERCASE, size, colour, shadow, background box, position, margin, width
-- **Word-by-word highlight** (karaoke style) for Shorts/Reels
-- Presets: Classic, Shorts/Reels, Minimal
+- **Word-by-word highlight** (karaoke style) for Shorts/Reels — colour the spoken word, put a coloured box behind it, or both (the two work independently)
+- Presets: Classic, Shorts/Reels, Word Box, Minimal
 - Burn-in export with AVFoundation + Core Animation (hardware-encoded MP4, keeps original audio and rotation)
 - SRT / WebVTT export and import
 
@@ -24,7 +24,19 @@ open build/Captionate.dmg     # drag Captionate into Applications
 
 For an Intel + Apple Silicon universal build (needs full Xcode): `UNIVERSAL=1 ./build.sh`
 
-Or push this folder to GitHub — `.github/workflows/build.yml` builds the DMG on a macOS runner and uploads it as an artifact (and to the release when you push a `v*` tag).
+The DMG carries the Captionate icon (on the mounted disk and on the `.dmg` file) and opens to a
+drag-to-Applications window with a patterned background. Pick a background with `DMG_BACKGROUND`:
+
+```bash
+./build.sh                                   # default: dots
+DMG_BACKGROUND=grid ./build.sh               # built-in: dots | grid | diagonal | waves
+DMG_BACKGROUND=~/Pictures/my-bg.png ./build.sh   # your own image (scaled to 660×400)
+```
+
+The window layout is applied through Finder — if macOS asks, allow Terminal to control Finder.
+To edit the built-in patterns, change and run `Resources/dmg/make_backgrounds.py` (needs Pillow).
+
+Or let GitHub do it — `.github/workflows/build.yml` builds the DMG on a macOS runner on every push to `main` that touches the app, uploads it as an artifact, and commits the fresh `build/Captionate.dmg` (the file the website's Download button serves). Run it by hand from the Actions tab to choose a background.
 
 ### First launch
 The app is ad-hoc signed, not notarized. If macOS says it can't be opened:
@@ -44,7 +56,7 @@ Sources/Captionate/
   VideoExporter.swift   burn-in renderer (CATextLayer timeline)
   Views.swift           SwiftUI UI: player, overlay, list, style panel
   Models.swift          Word, CaptionSegment, CaptionStyle
-Resources/              Info.plist, AppIcon.icns
+Resources/              Info.plist, AppIcon.icns, dmg/ (DMG backgrounds)
 build.sh                builds .app + .dmg
 ```
 

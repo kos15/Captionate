@@ -1,6 +1,7 @@
 import SwiftUI
 import AVKit
 import AVFoundation
+import QuartzCore
 
 struct ContentView: View {
     @EnvironmentObject var state: AppState
@@ -108,7 +109,8 @@ struct PlayerPreview: View {
                                   insideRect: CGRect(origin: .zero, size: geo.size))
             ZStack(alignment: .topLeading) {
                 PlayerView(player: state.player)
-                CaptionOverlay(size: rect.size)
+                CaptionOverlay(segment: state.activeSegment, time: state.currentTime,
+                               style: state.style, size: rect.size)
                     .frame(width: rect.width, height: rect.height)
                     .offset(x: rect.minX, y: rect.minY)
                     .allowsHitTesting(false)
@@ -137,60 +139,41 @@ struct PlayerView: NSViewRepresentable {
     }
 }
 
-struct CaptionOverlay: View {
-    @EnvironmentObject var state: AppState
+/// Live caption preview, drawn with the same Core Animation layers as the export.
+struct CaptionOverlay: NSViewRepresentable {
+    let segment: CaptionSegment?
+    let time: Double
+    let style: CaptionStyle
     let size: CGSize
 
-    var body: some View {
-        let style = state.style
-        let fs = CGFloat(style.fontScale) * size.height
-        let margin = CGFloat(style.verticalMargin) * size.height
-        let alignment: Alignment = {
-            switch style.position {
-            case .bottom: return .bottom
-            case .middle: return .center
-            case .top: return .top
-            }
-        }()
+    func makeNSView(context: Context) -> CaptionLayerView { CaptionLayerView(frame: .zero) }
 
-        ZStack(alignment: alignment) {
-            Color.clear
-            if let seg = state.activeSegment {
-                captionText(seg)
-                    .font(Font(style.nsFont(size: max(fs, 1)) as CTFont))
-                    .multilineTextAlignment(.center)
-                    .shadow(color: style.showShadow ? .black.opacity(0.85) : .clear,
-                            radius: fs * 0.08, x: 0, y: fs * 0.04)
-                    .padding(.horizontal, fs * 0.35)
-                    .padding(.vertical, fs * 0.2)
-                    .background(
-                        RoundedRectangle(cornerRadius: fs * 0.25)
-                            .fill(style.showBackground
-                                  ? style.backgroundColor.opacity(style.backgroundOpacity)
-                                  : Color.clear)
-                    )
-                    .frame(maxWidth: size.width * CGFloat(style.maxWidth) + fs * 0.7)
-                    .padding(style.position == .bottom ? .bottom : .top,
-                             style.position == .middle ? 0 : margin)
-            }
-        }
+    func updateNSView(_ view: CaptionLayerView, context: Context) {
+        view.render(segment: segment, time: time, style: style, size: size)
+    }
+}
+
+final class CaptionLayerView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
     }
 
-    private func captionText(_ seg: CaptionSegment) -> Text {
-        let style = state.style
-        let words = seg.timedWords()
-        guard style.wordHighlight, !words.isEmpty else {
-            return Text(style.displayText(seg.text)).foregroundStyle(style.textColor)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    // Bottom-left origin, like the export's render layer.
+    override var isFlipped: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func render(segment: CaptionSegment?, time: Double, style: CaptionStyle, size: CGSize) {
+        guard let root = layer else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        root.sublayers?.forEach { $0.removeFromSuperlayer() }
+        if let segment, size.width > 0, size.height > 0 {
+            root.addSublayer(CaptionLayers.still(segment: segment, time: time, style: style, renderSize: size))
         }
-        let t = state.currentTime
-        let active = words.lastIndex { $0.start <= t } ?? 0
-        var result = Text("")
-        for (i, w) in words.enumerated() {
-            if i > 0 { result = result + Text(" ") }
-            result = result + Text(style.displayText(w.text))
-                .foregroundStyle(i == active ? style.highlightColor : style.textColor)
-        }
-        return result
+        CATransaction.commit()
     }
 }
 
@@ -345,6 +328,7 @@ struct StyleView: View {
                     Button("Classic") { state.applyPreset("Classic") }
                     Button("Shorts / Reels") { state.applyPreset("Shorts") }
                     Button("Minimal") { state.applyPreset("Minimal") }
+                    Button("Word Box") { state.applyPreset("WordBox") }
                 }
             }
 
@@ -359,10 +343,18 @@ struct StyleView: View {
                 Toggle("Shadow", isOn: $state.style.showShadow)
             }
 
-            Section("Word-by-word highlight") {
-                Toggle("Highlight the spoken word", isOn: $state.style.wordHighlight)
+            Section {
+                Toggle("Colour the spoken word", isOn: $state.style.wordHighlight)
                 ColorPicker("Highlight colour", selection: $state.style.highlightColor, supportsOpacity: false)
                     .disabled(!state.style.wordHighlight)
+                Toggle("Box behind the spoken word", isOn: $state.style.wordBackground)
+                ColorPicker("Word box colour", selection: $state.style.wordBackgroundColor, supportsOpacity: true)
+                    .disabled(!state.style.wordBackground)
+            } header: {
+                Text("Word-by-word highlight")
+            } footer: {
+                Text("Text colour and word box work independently — use either one or both.")
+                    .foregroundStyle(.secondary)
             }
 
             Section("Background") {
