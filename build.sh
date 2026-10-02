@@ -9,6 +9,13 @@
 #   /path/to/image.png                        -> your own image (scaled to 660x400)
 #   e.g.  DMG_BACKGROUND=waves ./build.sh
 #         DMG_BACKGROUND=~/Pictures/bg.png ./build.sh
+#
+# Signing & notarization (removes the "Apple could not verify…" warning).
+# Needs an Apple Developer Program membership. Without these, the app is ad-hoc signed.
+#   SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+#   and one of:
+#     NOTARY_PROFILE=captionate   (made once with: xcrun notarytool store-credentials captionate)
+#     APPLE_ID=you@example.com APPLE_TEAM_ID=TEAMID APPLE_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -33,9 +40,15 @@ cp Resources/Info.plist "$BUNDLE/Contents/Info.plist"
 cp Resources/AppIcon.icns "$BUNDLE/Contents/Resources/AppIcon.icns"
 printf 'APPL????' > "$BUNDLE/Contents/PkgInfo"
 
-echo "▸ Signing (ad-hoc)…"
-codesign --force --deep --sign - "$BUNDLE"
-codesign --verify --verbose "$BUNDLE"
+if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+  echo "▸ Signing with Developer ID ($SIGN_IDENTITY)…"
+  # Hardened runtime + secure timestamp are required for notarization.
+  codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$BUNDLE"
+else
+  echo "▸ Signing (ad-hoc — set SIGN_IDENTITY to sign with a Developer ID)…"
+  codesign --force --deep --sign - "$BUNDLE"
+fi
+codesign --verify --strict --verbose "$BUNDLE"
 
 echo "▸ Creating DMG…"
 DMG="$OUT/$APP.dmg"
@@ -117,6 +130,26 @@ hdiutil detach "$MOUNT_DIR" >/dev/null || hdiutil detach "$MOUNT_DIR" -force >/d
 hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 -o "$DMG" >/dev/null
 rm -f "$RW_DMG"
 
+if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+  codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
+  HAVE_NOTARY=0
+  if [[ -n "${NOTARY_PROFILE:-}" ]]; then
+    NOTARY_ARGS=(--keychain-profile "$NOTARY_PROFILE"); HAVE_NOTARY=1
+  elif [[ -n "${APPLE_ID:-}" && -n "${APPLE_TEAM_ID:-}" && -n "${APPLE_APP_PASSWORD:-}" ]]; then
+    NOTARY_ARGS=(--apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"); HAVE_NOTARY=1
+  fi
+  if [[ "$HAVE_NOTARY" == "1" ]]; then
+    echo "▸ Notarizing with Apple (takes a few minutes)…"
+    xcrun notarytool submit "$DMG" "${NOTARY_ARGS[@]}" --wait --timeout 30m
+    xcrun stapler staple "$DMG"
+    xcrun stapler validate "$DMG"
+    spctl --assess --type open --context context:primary-signature --verbose "$DMG"
+    NOTARIZED=1
+  else
+    echo "  ⚠ Signed but not notarized — set NOTARY_PROFILE or APPLE_ID/APPLE_TEAM_ID/APPLE_APP_PASSWORD."
+  fi
+fi
+
 # Give the .dmg file itself the Captionate icon (shown in Finder before it's opened).
 osascript -l JavaScript >/dev/null <<JXA || echo "  ⚠ Couldn't set the .dmg file icon."
 ObjC.import('AppKit');
@@ -128,4 +161,9 @@ echo ""
 echo "✅ Done"
 echo "   App: $BUNDLE"
 echo "   DMG: $DMG  (background: $BG_CHOICE)"
+if [[ "${NOTARIZED:-0}" == "1" ]]; then
+  echo "   Signed + notarized: opens without Gatekeeper warnings."
+else
+  echo "   Not notarized: on first launch macOS will warn. See README → First launch."
+fi
 echo "   Open the DMG and drag Captionate into Applications."
