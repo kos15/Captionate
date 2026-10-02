@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Captionate — Free, offline captions for macOS</title>
+<meta name="description" content="Captionate is a free macOS app that captions Hindi and English videos fully on-device with Apple’s Speech framework. Style word-by-word highlights and export MP4, SRT or VTT — offline, no uploads.">
+<meta name="theme-color" content="#09090B">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Captionate — Captions that never leave your Mac">
+<meta property="og:description" content="Captionate is a free macOS app that captions Hindi and English videos fully on-device with Apple’s Speech framework. Style word-by-word highlights and export MP4, SRT or VTT — offline, no uploads.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'><rect x='1' y='1' width='26' height='26' rx='8' fill='%2316161A'/><rect x='6' y='15' width='16' height='3' rx='1.5' fill='%23EDEDEF'/><rect x='9' y='20' width='10' height='3' rx='1.5' fill='%23FFD43B'/><circle cx='14' cy='9' r='2.5' fill='%23EDEDEF' opacity='.5'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&amp;family=Geist:wght@300;400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Instrument+Serif:ital@0;1&amp;family=Noto+Sans+Devanagari:wght@500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#09090B}
+html{scroll-behavior:smooth}
+a{color:#EDEDEF;text-decoration:none}a:hover{color:#FFFFFF}
+*{box-sizing:border-box}
+::selection{background:#FFD43B;color:#09090B}
+@keyframes kara{0%{color:var(--hl,#FFD43B);transform:scale(1.08)}9%{color:var(--hl,#FFD43B);transform:scale(1.08)}10%{color:inherit;transform:scale(1)}100%{color:inherit;transform:scale(1)}}
+@keyframes karaS{0%{color:var(--hl,#FFD43B);transform:scale(1.1) translateY(-2px)}18%{color:var(--hl,#FFD43B);transform:scale(1.1) translateY(-2px)}20%{color:inherit;transform:none}100%{color:inherit;transform:none}}
+@keyframes lineSwap{0%{opacity:1}46%{opacity:1}50%{opacity:0}96%{opacity:0}100%{opacity:1}}
+@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes beam{0%{transform:translateX(-30%);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translateX(330%);opacity:0}}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes scan{0%{left:0%}100%{left:100%}}
+@keyframes wave{0%,100%{transform:scaleY(.55)}50%{transform:scaleY(1)}}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.kw{display:inline-block;transition:color .2s;animation:kara 10s infinite}
+.ks{display:inline-block;animation:karaS 5s infinite}
+.lineA{animation:lineSwap 10s infinite}
+.lineB{animation:lineSwap 10s infinite;animation-delay:5s;opacity:0}
+.mq{animation:marquee 38s linear infinite}
+.beam{animation:beam 3.6s ease-in-out infinite}
+.blink{animation:pulse 1.6s ease-in-out infinite}
+.scan{animation:scan 10s linear infinite}
+.wv{animation:wave 1.4s ease-in-out infinite;transform-origin:bottom}
+.floaty{animation:floaty 5s ease-in-out infinite}
+.spin{animation:spin 6s linear infinite}
+.navlinks{display:flex}
+.card{transition:border-color .25s, transform .25s}
+.card:hover{border-color:rgba(255,212,59,.35);transform:translateY(-2px)}
+.btnp{transition:transform .2s, box-shadow .2s}
+.btnp:hover{transform:translateY(-1px);box-shadow:0 10px 40px -10px rgba(255,212,59,.55)}
+.ghost:hover{background:rgba(255,255,255,.08)}
+.tab{transition:color .25s}
+.pill{transition:transform .45s cubic-bezier(.65,0,.35,1)}
+.frame{transition:width .45s cubic-bezier(.65,0,.35,1), aspect-ratio .45s}
+.faqbtn:hover{color:#FFFFFF}
+.faqbtn:focus-visible,.tab:focus-visible,.sw:focus-visible,.tg:focus-visible,a:focus-visible{outline:2px solid #FFD43B;outline-offset:3px}
+@media (max-width:820px){.navlinks{display:none}}
+@media (prefers-reduced-motion:reduce){.kw,.ks,.lineA,.lineB,.mq,.beam,.blink,.scan,.wv,.floaty,.spin{animation:none}.lineB{opacity:0}}
+</style>
+</head>
+<body>
+<div style="min-height: 100vh; background: #09090B; color: #EDEDEF; font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; font-size: 16px; line-height: 1.55; --hl: #FFD43B; overflow-x: hidden">
+
+<!-- NAV -->
+<header style="position: sticky; top: 0; z-index: 20; background: rgba(9,9,11,0.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid rgba(255,255,255,0.06)">
+<nav style="max-width: 1200px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px">
+<a href="#top" style="display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 17px; letter-spacing: -0.01em">
+<svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="8" fill="#16161A" stroke="rgba(255,255,255,0.14)"></rect><rect x="6" y="15" width="16" height="3" rx="1.5" fill="#EDEDEF"></rect><rect x="9" y="20" width="10" height="3" rx="1.5" fill="#FFD43B"></rect><circle cx="14" cy="9" r="2.5" fill="#EDEDEF" opacity="0.5"></circle></svg>
+<span>Captionate</span>
+</a>
+<div class="navlinks" style="align-items: center; gap: 4px; font-size: 14px; color: #A1A1AA">
+<a href="#how" class="ghost" style="padding: 8px 12px; border-radius: 8px; color: #A1A1AA">How it works</a>
+<a href="#features" class="ghost" style="padding: 8px 12px; border-radius: 8px; color: #A1A1AA">Features</a>
+<a href="#studio" class="ghost" style="padding: 8px 12px; border-radius: 8px; color: #A1A1AA">Style studio</a>
+<a href="#privacy" class="ghost" style="padding: 8px 12px; border-radius: 8px; color: #A1A1AA">Privacy</a>
+<a href="#faq" class="ghost" style="padding: 8px 12px; border-radius: 8px; color: #A1A1AA">FAQ</a>
+</div>
+<a href="https://github.com/kos15/Captionate/raw/main/build/Captionate.dmg" class="btnp" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; min-height: 44px; border-radius: 10px; background: #EDEDEF; color: #09090B; font-weight: 600; font-size: 14px">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
+Download
+</a>
+</nav>
+</header>
+
+<!-- HERO -->
+<section id="top" style="position: relative; padding: 88px 24px 64px">
+<div aria-hidden="true" style="position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px); background-size: 56px 56px; mask-image: radial-gradient(ellipse 70% 55% at 50% 30%, #000 30%, transparent 75%); -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 30%, #000 30%, transparent 75%)"></div>
+<div aria-hidden="true" style="position: absolute; left: 50%; top: -180px; width: 900px; height: 520px; transform: translateX(-50%); pointer-events: none; background: radial-gradient(closest-side, rgba(255,212,59,0.13), transparent 70%)"></div>
+
+<div style="position: relative; max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 28px">
+<div style="display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); font-size: 13px; color: #C4C4CC">
+<span style="padding: 3px 10px; border-radius: 999px; background: #FFD43B; color: #09090B; font-weight: 600; font-size: 12px">Free</span>
+100% on-device · macOS 14+ · Hindi &amp; English
+</div>
+<h1 style="margin: 0; max-width: 980px; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: clamp(48px, 8vw, 104px); line-height: 0.98; letter-spacing: -0.02em; color: #F4F4F5">Captions that never <span style="font-style: italic; color: #FFD43B">leave</span> your Mac.</h1>
+<p style="margin: 0; max-width: 640px; font-size: clamp(17px, 2vw, 19px); color: #A1A1AA">Drop in any Hindi or English video. Captionate transcribes it on-device with Apple’s Speech framework, lets you style every word, and exports a captioned MP4 — offline, free, no uploads.</p>
+<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 12px">
+<a href="https://github.com/kos15/Captionate/raw/main/build/Captionate.dmg" class="btnp" style="display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; min-height: 48px; border-radius: 12px; background: #FFD43B; color: #09090B; font-weight: 600; font-size: 15px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.1 2.5-1.8 3.1-.5 7.6 1.3 10.1.8 1.2 1.8 2.6 3.1 2.5 1.3-.1 1.7-.8 3.3-.8 1.5 0 1.9.8 3.3.8 1.4 0 2.2-1.2 3-2.5 1-1.4 1.4-2.8 1.4-2.9 0 0-2.7-1-2.7-4zM14 5.2c.7-.8 1.2-2 1-3.2-1 0-2.2.7-3 1.5-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.4z"></path></svg>
+Download for macOS
+</a>
+<a href="#how" class="ghost" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 22px; min-height: 48px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); color: #EDEDEF; font-weight: 500; font-size: 15px">
+See how it works
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="m13 6 6 6-6 6"></path></svg>
+</a>
+</div>
+<p style="margin: -8px 0 0; font-size: 13px; color: #8A8A93; font-family: 'Geist Mono', ui-monospace, monospace">Apple Silicon &amp; Intel · No account · No ffmpeg</p>
+
+<!-- App window mockup -->
+<div class="floaty" style="width: 100%; max-width: 1080px; margin-top: 28px; border-radius: 18px; padding: 1px; background: linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.03)); box-shadow: 0 40px 120px -30px rgba(0,0,0,0.9), 0 0 0 1px rgba(0,0,0,0.6)">
+<div style="border-radius: 17px; background: #111114; overflow: hidden; text-align: left">
+<div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); background: #141418">
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span>
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span>
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+<span style="flex: 1; text-align: center; font-size: 13px; color: #8A8A93">interview_final.mov — Captionate</span>
+<span style="font-size: 12px; color: #8A8A93; font-family: 'Geist Mono', monospace">Hindi (India)</span>
+</div>
+<div style="display: flex; flex-wrap: wrap">
+<!-- video -->
+<div style="flex: 999 1 560px; min-width: 0; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+<div style="position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: radial-gradient(ellipse 60% 70% at 62% 35%, #3A2E22 0%, #1B1714 55%, #0E0D0C 100%)">
+<div aria-hidden="true" style="position: absolute; left: 50%; bottom: -8%; width: 46%; height: 58%; transform: translateX(-38%); border-radius: 48% 48% 0 0; background: #0B0A09"></div>
+<div aria-hidden="true" style="position: absolute; left: 50%; top: 18%; width: 18%; aspect-ratio: 1; transform: translateX(-10%); border-radius: 50%; background: #0B0A09"></div>
+<div aria-hidden="true" style="position: absolute; right: 9%; top: 14%; width: 70px; height: 120px; border-radius: 6px; background: rgba(255,200,120,0.08)"></div>
+<div style="position: absolute; top: 12px; left: 12px; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(0,0,0,0.55); font-size: 11px; color: #D4D4D8; font-family: 'Geist Mono', monospace"><span class="blink" style="width: 6px; height: 6px; border-radius: 50%; background: #28C840"></span>On-device · offline</div>
+<div style="position: absolute; left: 0; right: 0; bottom: 9%; height: 64px">
+<div class="lineA" style="position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; gap: 12px; font-family: 'Anton', Impact, sans-serif; font-size: clamp(22px, 3.4vw, 40px); letter-spacing: 0.01em; color: #FFFFFF; text-transform: uppercase; text-shadow: 0 3px 0 #000, 0 0 18px rgba(0,0,0,0.7)">
+<span class="kw" style="animation-delay: 0s">Your</span><span class="kw" style="animation-delay: 1s">video</span><span class="kw" style="animation-delay: 2s">never</span><span class="kw" style="animation-delay: 3s">leaves</span><span class="kw" style="animation-delay: 4s">home</span>
+</div>
+<div class="lineB" style="position: absolute; inset: 0; display: flex; justify-content: center; align-items: center; gap: 12px; font-family: 'Noto Sans Devanagari', sans-serif; font-weight: 800; font-size: clamp(22px, 3.2vw, 38px); color: #FFFFFF; text-shadow: 0 3px 0 #000, 0 0 18px rgba(0,0,0,0.7)">
+<span class="kw" style="animation-delay: 5s">पूरी</span><span class="kw" style="animation-delay: 6s">तरह</span><span class="kw" style="animation-delay: 7s">ऑफ़लाइन,</span><span class="kw" style="animation-delay: 8s">बिल्कुल</span><span class="kw" style="animation-delay: 9s">फ्री</span>
+</div>
+</div>
+</div>
+<!-- timeline -->
+<div style="position: relative; height: 54px; border-radius: 10px; background: #18181C; border: 1px solid rgba(255,255,255,0.06); padding: 8px 10px; display: flex; align-items: flex-end; gap: 3px; overflow: hidden">
+
+<span class="wv" style="flex: 1; height: 38%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.00s"></span>
+
+<span class="wv" style="flex: 1; height: 52%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.12s"></span>
+
+<span class="wv" style="flex: 1; height: 70%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.24s"></span>
+
+<span class="wv" style="flex: 1; height: 44%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.36s"></span>
+
+<span class="wv" style="flex: 1; height: 86%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.48s"></span>
+
+<span class="wv" style="flex: 1; height: 62%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.60s"></span>
+
+<span class="wv" style="flex: 1; height: 30%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.72s"></span>
+
+<span class="wv" style="flex: 1; height: 58%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.84s"></span>
+
+<span class="wv" style="flex: 1; height: 92%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.96s"></span>
+
+<span class="wv" style="flex: 1; height: 74%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.00s"></span>
+
+<span class="wv" style="flex: 1; height: 40%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.12s"></span>
+
+<span class="wv" style="flex: 1; height: 66%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.24s"></span>
+
+<span class="wv" style="flex: 1; height: 80%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.36s"></span>
+
+<span class="wv" style="flex: 1; height: 48%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.48s"></span>
+
+<span class="wv" style="flex: 1; height: 34%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.60s"></span>
+
+<span class="wv" style="flex: 1; height: 60%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.72s"></span>
+
+<span class="wv" style="flex: 1; height: 88%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.84s"></span>
+
+<span class="wv" style="flex: 1; height: 72%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.96s"></span>
+
+<span class="wv" style="flex: 1; height: 46%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.00s"></span>
+
+<span class="wv" style="flex: 1; height: 56%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.12s"></span>
+
+<span class="wv" style="flex: 1; height: 94%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.24s"></span>
+
+<span class="wv" style="flex: 1; height: 68%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.36s"></span>
+
+<span class="wv" style="flex: 1; height: 36%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.48s"></span>
+
+<span class="wv" style="flex: 1; height: 50%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.60s"></span>
+
+<span class="wv" style="flex: 1; height: 78%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.72s"></span>
+
+<span class="wv" style="flex: 1; height: 64%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.84s"></span>
+
+<span class="wv" style="flex: 1; height: 42%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.96s"></span>
+
+<span class="wv" style="flex: 1; height: 84%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.00s"></span>
+
+<span class="wv" style="flex: 1; height: 58%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.12s"></span>
+
+<span class="wv" style="flex: 1; height: 32%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.24s"></span>
+
+<span class="wv" style="flex: 1; height: 70%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.36s"></span>
+
+<span class="wv" style="flex: 1; height: 90%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.48s"></span>
+
+<span class="wv" style="flex: 1; height: 54%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.60s"></span>
+
+<span class="wv" style="flex: 1; height: 40%; border-radius: 2px; background: rgba(255,212,59,0.55); animation-delay: 0.72s"></span>
+
+<span class="wv" style="flex: 1; height: 62%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.84s"></span>
+
+<span class="wv" style="flex: 1; height: 82%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.96s"></span>
+
+<span class="wv" style="flex: 1; height: 48%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.00s"></span>
+
+<span class="wv" style="flex: 1; height: 36%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.12s"></span>
+
+<span class="wv" style="flex: 1; height: 74%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.24s"></span>
+
+<span class="wv" style="flex: 1; height: 96%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.36s"></span>
+
+<span class="wv" style="flex: 1; height: 60%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.48s"></span>
+
+<span class="wv" style="flex: 1; height: 44%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.60s"></span>
+
+<span class="wv" style="flex: 1; height: 68%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.72s"></span>
+
+<span class="wv" style="flex: 1; height: 86%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.84s"></span>
+
+<span class="wv" style="flex: 1; height: 52%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.96s"></span>
+
+<span class="wv" style="flex: 1; height: 38%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.00s"></span>
+
+<span class="wv" style="flex: 1; height: 64%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.12s"></span>
+
+<span class="wv" style="flex: 1; height: 80%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.24s"></span>
+
+<span class="wv" style="flex: 1; height: 46%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.36s"></span>
+
+<span class="wv" style="flex: 1; height: 58%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.48s"></span>
+
+<span class="wv" style="flex: 1; height: 90%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.60s"></span>
+
+<span class="wv" style="flex: 1; height: 72%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.72s"></span>
+
+<span class="wv" style="flex: 1; height: 34%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.84s"></span>
+
+<span class="wv" style="flex: 1; height: 56%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.96s"></span>
+
+<span class="wv" style="flex: 1; height: 76%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.00s"></span>
+
+<span class="wv" style="flex: 1; height: 62%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.12s"></span>
+
+<span class="wv" style="flex: 1; height: 42%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.24s"></span>
+
+<span class="wv" style="flex: 1; height: 88%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.36s"></span>
+
+<span class="wv" style="flex: 1; height: 66%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.48s"></span>
+
+<span class="wv" style="flex: 1; height: 50%; border-radius: 2px; background: rgba(255,255,255,0.18); animation-delay: 0.60s"></span>
+
+<span class="scan" aria-hidden="true" style="position: absolute; top: 0; bottom: 0; width: 2px; background: #FFD43B; box-shadow: 0 0 12px #FFD43B"></span>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; background: #FFD43B; color: #09090B; font-size: 13px; font-weight: 600">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"></path></svg>Generate Captions</span>
+<span style="padding: 8px 12px; border-radius: 8px; background: #1E1E23; color: #C4C4CC; font-size: 13px">Shorts / Reels</span>
+<span style="padding: 8px 12px; border-radius: 8px; background: #1E1E23; color: #C4C4CC; font-size: 13px">Word highlight · on</span>
+<span style="flex: 1"></span>
+<span style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); color: #EDEDEF; font-size: 13px">Export MP4</span>
+<span style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); color: #EDEDEF; font-size: 13px">.srt / .vtt</span>
+</div>
+</div>
+<!-- caption list -->
+<div style="flex: 1 1 300px; min-width: 0; border-left: 1px solid rgba(255,255,255,0.06); padding: 18px; display: flex; flex-direction: column; gap: 8px; background: #0F0F12">
+<div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #8A8A93; text-transform: uppercase; letter-spacing: 0.08em; padding: 0 4px 6px">Captions<span style="font-family: 'Geist Mono', monospace; text-transform: none; letter-spacing: 0">24 lines</span></div>
+
+<div style="display: flex; gap: 12px; padding: 10px 12px; border-radius: 10px; background: transparent; border: 1px solid transparent">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #71717A; padding-top: 2px; white-space: nowrap">00:00.0</span>
+<span style="font-size: 13.5px; color: #A1A1AA; line-height: 1.4">Namaste doston, swagat hai</span>
+</div>
+
+<div style="display: flex; gap: 12px; padding: 10px 12px; border-radius: 10px; background: transparent; border: 1px solid transparent">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #71717A; padding-top: 2px; white-space: nowrap">00:02.6</span>
+<span style="font-size: 13.5px; color: #A1A1AA; line-height: 1.4">aaj ka topic hai privacy</span>
+</div>
+
+<div style="display: flex; gap: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(255,212,59,0.08); border: 1px solid rgba(255,212,59,0.35)">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #FFD43B; padding-top: 2px; white-space: nowrap">00:05.1</span>
+<span style="font-size: 13.5px; color: #F4F4F5; line-height: 1.4">Your video never leaves home</span>
+</div>
+
+<div style="display: flex; gap: 12px; padding: 10px 12px; border-radius: 10px; background: transparent; border: 1px solid transparent">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #71717A; padding-top: 2px; white-space: nowrap">00:07.9</span>
+<span style="font-size: 13.5px; color: #A1A1AA; line-height: 1.4">पूरी तरह ऑफ़लाइन, बिल्कुल फ्री</span>
+</div>
+
+<div style="display: flex; gap: 12px; padding: 10px 12px; border-radius: 10px; background: transparent; border: 1px solid transparent">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #71717A; padding-top: 2px; white-space: nowrap">00:10.4</span>
+<span style="font-size: 13.5px; color: #A1A1AA; line-height: 1.4">chaliye shuru karte hain</span>
+</div>
+
+<div style="display: flex; gap: 12px; padding: 10px 12px; border-radius: 10px; background: transparent; border: 1px solid transparent">
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #71717A; padding-top: 2px; white-space: nowrap">00:12.8</span>
+<span style="font-size: 13.5px; color: #A1A1AA; line-height: 1.4">pehle video drop kijiye</span>
+</div>
+
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- LANGUAGE MARQUEE -->
+<section aria-label="Supported languages" style="border-top: 1px solid rgba(255,255,255,0.06); border-bottom: 1px solid rgba(255,255,255,0.06); padding: 22px 0; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent)">
+<div class="mq" style="display: flex; width: max-content; gap: 48px; font-family: 'Instrument Serif', serif; font-size: 30px; color: #71717A; white-space: nowrap">
+
+<span style="display: inline-flex; align-items: center; gap: 48px">English (India)<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">हिन्दी<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Hinglish<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">English (US)<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">English (UK)<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Español<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Français<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Deutsch<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">日本語<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Português<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Italiano<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">한국어<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">+ 50 more<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">English (India)<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">हिन्दी<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Hinglish<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">English (US)<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">English (UK)<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Español<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Français<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Deutsch<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">日本語<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Português<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">Italiano<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">한국어<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+<span style="display: inline-flex; align-items: center; gap: 48px">+ 50 more<span style="width: 6px; height: 6px; border-radius: 50%; background: #3F3F46"></span></span>
+
+</div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" style="padding: 120px 24px 40px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px">
+<div style="display: flex; flex-direction: column; gap: 14px; max-width: 720px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #FFD43B; letter-spacing: 0.06em">01 — HOW IT WORKS</span>
+<h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: clamp(38px, 5vw, 64px); line-height: 1.02; letter-spacing: -0.015em; color: #F4F4F5">From raw clip to captioned video in <span style="font-style: italic">four moves.</span></h2>
+</div>
+<div style="position: relative">
+<div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 27px; height: 1px; background: rgba(255,255,255,0.1); overflow: hidden">
+<div class="beam" style="width: 30%; height: 1px; background: linear-gradient(90deg, transparent, #FFD43B, transparent)"></div>
+</div>
+<div style="position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 28px">
+
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="width: 56px; height: 56px; border-radius: 16px; background: #131316; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-family: 'Geist Mono', monospace; font-size: 14px; color: #FFD43B">01</div>
+<h3 style="margin: 6px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: #F4F4F5">Drop a video</h3>
+<p style="margin: 0; color: #A1A1AA; font-size: 15px">Drag any Hindi or English clip into the window. It never gets copied anywhere.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="width: 56px; height: 56px; border-radius: 16px; background: #131316; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-family: 'Geist Mono', monospace; font-size: 14px; color: #FFD43B">02</div>
+<h3 style="margin: 6px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: #F4F4F5">Generate captions</h3>
+<p style="margin: 0; color: #A1A1AA; font-size: 15px">Apple Speech transcribes it on-device — word timings included.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="width: 56px; height: 56px; border-radius: 16px; background: #131316; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-family: 'Geist Mono', monospace; font-size: 14px; color: #FFD43B">03</div>
+<h3 style="margin: 6px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: #F4F4F5">Edit &amp; style</h3>
+<p style="margin: 0; color: #A1A1AA; font-size: 15px">Fix words, nudge timings, pick a preset, then tune font, colour and highlight.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="width: 56px; height: 56px; border-radius: 16px; background: #131316; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; font-family: 'Geist Mono', monospace; font-size: 14px; color: #FFD43B">04</div>
+<h3 style="margin: 6px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: #F4F4F5">Export</h3>
+<p style="margin: 0; color: #A1A1AA; font-size: 15px">Burn into a hardware-encoded MP4, or save .srt / .vtt subtitles.</p>
+</div>
+
+</div>
+</div>
+</div>
+</section>
+
+<!-- FEATURES BENTO -->
+<section id="features" style="padding: 100px 24px 40px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 14px; max-width: 680px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #FFD43B; letter-spacing: 0.06em">02 — FEATURES</span>
+<h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: clamp(38px, 5vw, 64px); line-height: 1.02; letter-spacing: -0.015em; color: #F4F4F5">Everything a caption needs. <span style="font-style: italic; color: #A1A1AA">Nothing it doesn’t.</span></h2>
+</div>
+<p style="margin: 0; max-width: 360px; color: #A1A1AA">A native SwiftUI app — fast, quiet, and built on Apple’s own Speech, AVFoundation and Core Animation.</p>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 16px">
+
+<!-- On-device -->
+<div class="card" style="flex: 1 1 560px; min-width: 0; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: #111114; padding: 28px; display: flex; flex-direction: column; gap: 20px; overflow: hidden; position: relative">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: #F4F4F5">On-device transcription</h3>
+<p style="margin: 0; color: #A1A1AA; max-width: 440px">Apple’s Speech framework runs locally on your Mac. English (India), Hindi and 50+ languages — no internet required.</p>
+</div>
+<div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding-top: 8px">
+<div style="position: relative; width: 132px; height: 132px; display: flex; align-items: center; justify-content: center">
+<div class="spin" aria-hidden="true" style="position: absolute; inset: 0; border-radius: 50%; border: 1px dashed rgba(255,212,59,0.4)"></div>
+<div aria-hidden="true" style="position: absolute; inset: 18px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.1)"></div>
+<div style="width: 64px; height: 64px; border-radius: 18px; background: #1A1A1F; border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center; color: #FFD43B">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; font-family: 'Geist Mono', monospace; font-size: 13px">
+<div style="display: flex; gap: 10px; align-items: center; color: #C4C4CC"><span style="width: 8px; height: 8px; border-radius: 50%; background: #28C840"></span>Speech recognizer · on-device</div>
+<div style="display: flex; gap: 10px; align-items: center; color: #C4C4CC"><span style="width: 8px; height: 8px; border-radius: 50%; background: #28C840"></span>Audio processed in 50-second chunks</div>
+<div style="display: flex; gap: 10px; align-items: center; color: #8A8A93"><span style="width: 8px; height: 8px; border-radius: 50%; background: #52525B"></span>Network · not needed</div>
+</div>
+</div>
+</div>
+
+<!-- Word highlight -->
+<div class="card" style="flex: 1 1 380px; min-width: 0; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: #111114; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: #F4F4F5">Word-by-word highlight</h3>
+<p style="margin: 0; color: #A1A1AA">Karaoke-style captions that follow your voice — made for Shorts and Reels.</p>
+</div>
+<div style="flex: 1; min-height: 150px; border-radius: 14px; background: #18181C; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 20px; font-family: 'Anton', Impact, sans-serif; font-size: 34px; text-transform: uppercase; color: #FFFFFF; text-shadow: 0 3px 0 #000; flex-wrap: wrap">
+<span class="ks" style="animation-delay: 0s">Speak</span><span class="ks" style="animation-delay: 1s">and</span><span class="ks" style="animation-delay: 2s">it</span><span class="ks" style="animation-delay: 3s">lights</span><span class="ks" style="animation-delay: 4s">up</span>
+</div>
+</div>
+
+<!-- Editable list -->
+<div class="card" style="flex: 1 1 380px; min-width: 0; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: #111114; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: #F4F4F5">Edit like a doc</h3>
+<p style="margin: 0; color: #A1A1AA">Fix words, nudge timings, add or delete lines. Click any caption to seek the video there.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #18181C; font-size: 14px"><span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #8A8A93">00:04.2</span><span style="color: #C4C4CC">Welcome back to the channel</span></div>
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #1C1B14; border: 1px solid rgba(255,212,59,0.35); font-size: 14px"><span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #FFD43B">00:06.8</span><span style="color: #F4F4F5">aaj hum <span style="text-decoration: line-through; color: #8A8A93">dekhenge</span> <span style="color: #FFD43B">seekhenge</span> SwiftUI</span><span class="blink" style="width: 2px; height: 16px; background: #FFD43B"></span></div>
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: #18181C; font-size: 14px"><span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #8A8A93">00:09.1</span><span style="color: #C4C4CC">bina internet ke</span><span style="margin-left: auto; font-family: 'Geist Mono', monospace; font-size: 11px; color: #8A8A93">−0.2s</span></div>
+</div>
+</div>
+
+<!-- Live preview -->
+<div class="card" style="flex: 1 1 380px; min-width: 0; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: #111114; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: #F4F4F5">Preview = export</h3>
+<p style="margin: 0; color: #A1A1AA">The live preview matches the burned-in result exactly. No surprises after rendering.</p>
+</div>
+<div style="display: flex; gap: 10px; align-items: stretch">
+<div style="flex: 1; border-radius: 10px; aspect-ratio: 4 / 3; background: #1B1714; position: relative; overflow: hidden"><span style="position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-weight: 700; font-size: 13px; color: #FFF">Live preview</span><span style="position: absolute; top: 8px; left: 8px; font-family: 'Geist Mono', monospace; font-size: 10px; color: #8A8A93">EDITOR</span></div>
+<div style="display: flex; align-items: center; color: #FFD43B; font-family: 'Geist Mono', monospace">=</div>
+<div style="flex: 1; border-radius: 10px; aspect-ratio: 4 / 3; background: #1B1714; position: relative; overflow: hidden"><span style="position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font-weight: 700; font-size: 13px; color: #FFF">Live preview</span><span style="position: absolute; top: 8px; left: 8px; font-family: 'Geist Mono', monospace; font-size: 10px; color: #8A8A93">.MP4</span></div>
+</div>
+</div>
+
+<!-- Style everything -->
+<div class="card" style="flex: 1 1 560px; min-width: 0; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: #111114; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: #F4F4F5">Style every pixel</h3>
+<p style="margin: 0; color: #A1A1AA; max-width: 480px">Use any font installed on your Mac, then tune it until it looks like your brand.</p>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">Any installed font</span>
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">Bold</span>
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">UPPERCASE</span>
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">Size</span>
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">Colour</span>
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">Shadow</span>
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">Background box</span>
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">Position</span>
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">Margin</span>
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">Width</span>
+
+<span style="padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: #18181C; color: #D4D4D8; font-size: 14px">Highlight colour</span>
+
+</div>
+</div>
+
+<!-- Export -->
+<div class="card" style="flex: 1 1 380px; min-width: 0; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: #111114; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; color: #F4F4F5">Export your way</h3>
+<p style="margin: 0; color: #A1A1AA">Burn captions into a hardware-encoded MP4 that keeps original audio and rotation — or export subtitles.</p>
+</div>
+<div style="display: flex; gap: 10px; flex-wrap: wrap">
+<div style="flex: 1 1 90px; padding: 16px; border-radius: 12px; background: #FFD43B; color: #09090B"><div style="font-family: 'Geist Mono', monospace; font-size: 18px; font-weight: 500">.mp4</div><div style="font-size: 12px; opacity: 0.8">Burn-in</div></div>
+<div style="flex: 1 1 90px; padding: 16px; border-radius: 12px; background: #18181C; border: 1px solid rgba(255,255,255,0.08)"><div style="font-family: 'Geist Mono', monospace; font-size: 18px; color: #F4F4F5">.srt</div><div style="font-size: 12px; color: #8A8A93">Import &amp; export</div></div>
+<div style="flex: 1 1 90px; padding: 16px; border-radius: 12px; background: #18181C; border: 1px solid rgba(255,255,255,0.08)"><div style="font-family: 'Geist Mono', monospace; font-size: 18px; color: #F4F4F5">.vtt</div><div style="font-size: 12px; color: #8A8A93">Import &amp; export</div></div>
+</div>
+</div>
+
+</div>
+</div>
+</section>
+
+<!-- STYLE STUDIO (interactive) -->
+<section id="studio" style="padding: 100px 24px 40px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px">
+<div style="display: flex; flex-direction: column; gap: 14px; max-width: 720px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #FFD43B; letter-spacing: 0.06em">03 — STYLE STUDIO</span>
+<h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: clamp(38px, 5vw, 64px); line-height: 1.02; letter-spacing: -0.015em; color: #F4F4F5">Start from a preset. <span style="font-style: italic">Make it yours.</span></h2>
+<p style="margin: 0; color: #A1A1AA">Try it — switch presets, pick a highlight colour, toggle uppercase.</p>
+</div>
+
+<div style="border-radius: 24px; border: 1px solid rgba(255,255,255,0.08); background: #0F0F12; padding: 24px; display: flex; flex-wrap: wrap; gap: 24px">
+<!-- controls -->
+<div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 28px; padding: 8px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #8A8A93">Preset</span>
+<div role="tablist" aria-label="Caption preset" style="position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 4px; border-radius: 12px; background: #18181C; border: 1px solid rgba(255,255,255,0.06)">
+<span class="pill" aria-hidden="true" id="pill" style="position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 3); border-radius: 9px; background: #2A2A31; box-shadow: inset 0 1px 0 rgba(255,255,255,0.08); transform: translateX(0%)"></span>
+
+<button type="button" role="tab" aria-selected="false" class="tab" data-tab style="position: relative; min-height: 44px; border: 0; background: transparent; color: #8A8A93; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 9px">Classic</button>
+
+<button type="button" role="tab" aria-selected="false" class="tab" data-tab style="position: relative; min-height: 44px; border: 0; background: transparent; color: #8A8A93; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 9px">Shorts / Reels</button>
+
+<button type="button" role="tab" aria-selected="false" class="tab" data-tab style="position: relative; min-height: 44px; border: 0; background: transparent; color: #8A8A93; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 9px">Minimal</button>
+
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #8A8A93">Highlight colour</span>
+<div style="display: flex; gap: 10px">
+
+<button type="button" class="sw" aria-label="Yellow highlight" aria-pressed="false" data-sw style="width: 44px; height: 44px; border-radius: 12px; border: 2px solid transparent; background: #18181C; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0"><span style="width: 24px; height: 24px; border-radius: 7px; background: #FFD43B"></span></button>
+
+<button type="button" class="sw" aria-label="Mint highlight" aria-pressed="false" data-sw style="width: 44px; height: 44px; border-radius: 12px; border: 2px solid transparent; background: #18181C; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0"><span style="width: 24px; height: 24px; border-radius: 7px; background: #7CF0C5"></span></button>
+
+<button type="button" class="sw" aria-label="Coral highlight" aria-pressed="false" data-sw style="width: 44px; height: 44px; border-radius: 12px; border: 2px solid transparent; background: #18181C; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0"><span style="width: 24px; height: 24px; border-radius: 7px; background: #FF8A5B"></span></button>
+
+<button type="button" class="sw" aria-label="Periwinkle highlight" aria-pressed="false" data-sw style="width: 44px; height: 44px; border-radius: 12px; border: 2px solid transparent; background: #18181C; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0"><span style="width: 24px; height: 24px; border-radius: 7px; background: #A7B4FF"></span></button>
+
+<button type="button" class="sw" aria-label="Pink highlight" aria-pressed="false" data-sw style="width: 44px; height: 44px; border-radius: 12px; border: 2px solid transparent; background: #18181C; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0"><span style="width: 24px; height: 24px; border-radius: 7px; background: #FF7AC6"></span></button>
+
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #8A8A93">Options</span>
+<button type="button" class="tg" aria-pressed="true" id="tgUpper" style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); background: #18181C; color: #EDEDEF; font-family: inherit; font-size: 14px; cursor: pointer">UPPERCASE<span data-track="u" style="width: 40px; height: 24px; border-radius: 999px; background: #3F3F46; position: relative; transition: background .25s"><span data-knob="u" style="position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF; transition: transform .25s; transform: translateX(0px)"></span></span></button>
+<button type="button" class="tg" aria-pressed="true" id="tgHl" style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); background: #18181C; color: #EDEDEF; font-family: inherit; font-size: 14px; cursor: pointer">Word-by-word highlight<span data-track="h" style="width: 40px; height: 24px; border-radius: 999px; background: #3F3F46; position: relative; transition: background .25s"><span data-knob="h" style="position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #FFFFFF; transition: transform .25s; transform: translateX(0px)"></span></span></button>
+</div>
+<div id="spec" style="padding: 14px; border-radius: 12px; background: #141417; border: 1px dashed rgba(255,255,255,0.1); font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93; line-height: 1.7"></div>
+</div>
+<!-- preview -->
+<div style="flex: 999 1 520px; min-width: 0; min-height: 460px; border-radius: 16px; background: #141417; border: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; padding: 24px">
+<div class="frame" id="frame" style="position: relative; width: ; max-width: 100%; aspect-ratio: ; border-radius: ; overflow: hidden; background: radial-gradient(ellipse 70% 60% at 50% 30%, #2E3A44 0%, #151A1F 60%, #0B0D10 100%); box-shadow: 0 30px 80px -30px rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: ; align-items: center; padding: ; --hl: #FFD43B">
+<div aria-hidden="true" style="position: absolute; left: 50%; bottom: -6%; width: 52%; height: 50%; transform: translateX(-50%); border-radius: 50% 50% 0 0; background: #080A0C"></div>
+<div aria-hidden="true" style="position: absolute; left: 50%; top: 22%; width: 22%; aspect-ratio: 1; transform: translateX(-50%); border-radius: 50%; background: #080A0C"></div>
+<div id="cap" style="position: relative; max-width: ; text-align: center; padding: ; border-radius: 8px; background: ; font-family: ; font-weight: ; font-style: ; font-size: ; line-height: 1.15; letter-spacing: ; color: #FFFFFF; text-shadow: ; text-transform: uppercase; display: flex; flex-wrap: wrap; justify-content: center; gap: 0 0.28em">
+
+<span class="ks" style="display: inline-block; animation-delay: 0s">Captions</span>
+
+<span class="ks" style="display: inline-block; animation-delay: 1s">that</span>
+
+<span class="ks" style="display: inline-block; animation-delay: 2s">follow</span>
+
+<span class="ks" style="display: inline-block; animation-delay: 3s">every</span>
+
+<span class="ks" style="display: inline-block; animation-delay: 4s">word</span>
+
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- PRIVACY -->
+<section id="privacy" style="padding: 120px 24px 40px">
+<div style="max-width: 1200px; margin: 0 auto; border-radius: 28px; border: 1px solid rgba(255,255,255,0.08); background: #0E0E11; position: relative; overflow: hidden">
+<div aria-hidden="true" style="position: absolute; right: -120px; top: -120px; width: 480px; height: 480px; border-radius: 50%; background: radial-gradient(closest-side, rgba(255,212,59,0.10), transparent)"></div>
+<div style="position: relative; padding: clamp(32px, 6vw, 72px); display: flex; flex-wrap: wrap; gap: 48px; align-items: center">
+<div style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 18px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #FFD43B; letter-spacing: 0.06em">04 — PRIVACY</span>
+<h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: clamp(40px, 5.6vw, 72px); line-height: 1; letter-spacing: -0.015em; color: #F4F4F5">Your footage stays <span style="font-style: italic; color: #FFD43B">yours.</span></h2>
+<p style="margin: 0; color: #A1A1AA; font-size: 17px; max-width: 480px">There is no Captionate server. Transcription, editing and rendering all happen on your Mac — so there’s nothing to upload, and nothing to train on.</p>
+</div>
+<div style="flex: 1 1 420px; min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px">
+
+<div style="padding: 20px; border-radius: 16px; background: #151518; border: 1px solid rgba(255,255,255,0.07); display: flex; flex-direction: column; gap: 10px">
+<span style="width: 36px; height: 36px; border-radius: 10px; background: #1F1F24; display: flex; align-items: center; justify-content: center; color: #FFD43B">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+</span>
+<div style="font-weight: 600; color: #F4F4F5">No uploads</div>
+<div style="font-size: 14px; color: #A1A1AA">The video file stays on your disk, start to finish.</div>
+</div>
+
+<div style="padding: 20px; border-radius: 16px; background: #151518; border: 1px solid rgba(255,255,255,0.07); display: flex; flex-direction: column; gap: 10px">
+<span style="width: 36px; height: 36px; border-radius: 10px; background: #1F1F24; display: flex; align-items: center; justify-content: center; color: #FFD43B">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+</span>
+<div style="font-weight: 600; color: #F4F4F5">No training</div>
+<div style="font-size: 14px; color: #A1A1AA">There’s no server — nothing is collected to learn from.</div>
+</div>
+
+<div style="padding: 20px; border-radius: 16px; background: #151518; border: 1px solid rgba(255,255,255,0.07); display: flex; flex-direction: column; gap: 10px">
+<span style="width: 36px; height: 36px; border-radius: 10px; background: #1F1F24; display: flex; align-items: center; justify-content: center; color: #FFD43B">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+</span>
+<div style="font-weight: 600; color: #F4F4F5">Works offline</div>
+<div style="font-size: 14px; color: #A1A1AA">Turn off Wi-Fi and caption anyway.</div>
+</div>
+
+<div style="padding: 20px; border-radius: 16px; background: #151518; border: 1px solid rgba(255,255,255,0.07); display: flex; flex-direction: column; gap: 10px">
+<span style="width: 36px; height: 36px; border-radius: 10px; background: #1F1F24; display: flex; align-items: center; justify-content: center; color: #FFD43B">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+</span>
+<div style="font-weight: 600; color: #F4F4F5">No account</div>
+<div style="font-size: 14px; color: #A1A1AA">Open the app and start. No sign-up, no subscription.</div>
+</div>
+
+</div>
+</div>
+</div>
+</section>
+
+<!-- HINDI + ENGLISH -->
+<section style="padding: 100px 24px 40px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px">
+<div style="display: flex; flex-direction: column; gap: 14px; max-width: 760px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #FFD43B; letter-spacing: 0.06em">05 — HINDI · ENGLISH · HINGLISH</span>
+<h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: clamp(38px, 5vw, 64px); line-height: 1.02; letter-spacing: -0.015em; color: #F4F4F5">Built for the way <span style="font-style: italic">India talks.</span></h2>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 16px">
+<div class="card" style="flex: 1 1 340px; min-width: 0; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: #111114; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93">Pick · English (India)</span>
+<div style="font-size: 26px; font-weight: 600; color: #F4F4F5; letter-spacing: -0.01em; line-height: 1.25">“Guys, aaj ka video thoda <span style="color: #FFD43B">special</span> hai.”</div>
+<p style="margin: 0; color: #A1A1AA">Hinglish works best with English (India) — Roman script, natural code-switching.</p>
+</div>
+<div class="card" style="flex: 1 1 340px; min-width: 0; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: #111114; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93">Pick · Hindi (India)</span>
+<div lang="hi" style="font-family: 'Noto Sans Devanagari', sans-serif; font-size: 26px; font-weight: 700; color: #F4F4F5; line-height: 1.4">“नमस्ते दोस्तों, आज हम <span style="color: #FFD43B">कैप्शन</span> बनाएंगे।”</div>
+<p style="margin: 0; color: #A1A1AA">Pure Hindi gets Devanagari captions with Hindi (India).</p>
+</div>
+<div class="card" style="flex: 1 1 340px; min-width: 0; border-radius: 20px; border: 1px solid rgba(255,255,255,0.08); background: #111114; padding: 28px; display: flex; flex-direction: column; gap: 18px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93">Pick · any of 50+</span>
+<div style="font-size: 26px; font-weight: 600; color: #F4F4F5; letter-spacing: -0.01em; line-height: 1.25">English, Español, Français, 日本語 <span style="color: #FFD43B">and more.</span></div>
+<p style="margin: 0; color: #A1A1AA">If a language says it’s unavailable on-device, add it under Dictation languages in System Settings.</p>
+</div>
+</div>
+</div>
+</section>
+
+<!-- SPECS -->
+<section style="padding: 100px 24px 40px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #FFD43B; letter-spacing: 0.06em">06 — UNDER THE HOOD</span>
+<h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: clamp(34px, 4vw, 52px); line-height: 1.05; color: #F4F4F5">Native through and through.</h2>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); border-top: 1px solid rgba(255,255,255,0.08)">
+
+<div style="padding: 24px 20px 24px 0; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93; text-transform: uppercase; letter-spacing: 0.06em">Requires</span>
+<span style="font-size: 17px; color: #F4F4F5">macOS 14 Sonoma or later</span>
+</div>
+
+<div style="padding: 24px 20px 24px 0; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93; text-transform: uppercase; letter-spacing: 0.06em">Runs on</span>
+<span style="font-size: 17px; color: #F4F4F5">Apple Silicon &amp; Intel (universal build)</span>
+</div>
+
+<div style="padding: 24px 20px 24px 0; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93; text-transform: uppercase; letter-spacing: 0.06em">Speech</span>
+<span style="font-size: 17px; color: #F4F4F5">Apple Speech framework, on-device</span>
+</div>
+
+<div style="padding: 24px 20px 24px 0; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93; text-transform: uppercase; letter-spacing: 0.06em">Rendering</span>
+<span style="font-size: 17px; color: #F4F4F5">AVFoundation + Core Animation — no ffmpeg</span>
+</div>
+
+<div style="padding: 24px 20px 24px 0; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93; text-transform: uppercase; letter-spacing: 0.06em">Video out</span>
+<span style="font-size: 17px; color: #F4F4F5">Hardware-encoded MP4, original audio &amp; rotation kept</span>
+</div>
+
+<div style="padding: 24px 20px 24px 0; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93; text-transform: uppercase; letter-spacing: 0.06em">Subtitles</span>
+<span style="font-size: 17px; color: #F4F4F5">SRT and WebVTT — import and export</span>
+</div>
+
+</div>
+</div>
+</section>
+
+<!-- FAQ -->
+<section id="faq" style="padding: 100px 24px 40px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 48px">
+<div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #FFD43B; letter-spacing: 0.06em">07 — FAQ</span>
+<h2 style="margin: 0; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: clamp(38px, 5vw, 64px); line-height: 1.02; letter-spacing: -0.015em; color: #F4F4F5">Questions, <span style="font-style: italic">answered.</span></h2>
+</div>
+<div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; border-top: 1px solid rgba(255,255,255,0.08)">
+
+<div style="border-bottom: 1px solid rgba(255,255,255,0.08)">
+<button type="button" class="faqbtn" aria-expanded="false" data-faq style="width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; border: 0; background: transparent; color: #E4E4E7; font-family: inherit; font-size: 17px; font-weight: 500; text-align: left; cursor: pointer">Is Captionate really free?<span data-rot="1" style="flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #A1A1AA; transition: transform .3s; transform: rotate(0deg)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button>
+<p hidden data-ans style="margin: 0; padding: 0 44px 22px 0; color: #A1A1AA; font-size: 15px">Yes. There’s no subscription and no account — it runs entirely on your Mac.</p>
+</div>
+
+<div style="border-bottom: 1px solid rgba(255,255,255,0.08)">
+<button type="button" class="faqbtn" aria-expanded="false" data-faq style="width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; border: 0; background: transparent; color: #E4E4E7; font-family: inherit; font-size: 17px; font-weight: 500; text-align: left; cursor: pointer">Does my video get uploaded anywhere?<span data-rot="1" style="flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #A1A1AA; transition: transform .3s; transform: rotate(0deg)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button>
+<p hidden data-ans style="margin: 0; padding: 0 44px 22px 0; color: #A1A1AA; font-size: 15px">No. Transcription uses Apple’s on-device speech recognition and rendering runs locally with AVFoundation. Your file never leaves your laptop and is never used for training.</p>
+</div>
+
+<div style="border-bottom: 1px solid rgba(255,255,255,0.08)">
+<button type="button" class="faqbtn" aria-expanded="false" data-faq style="width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; border: 0; background: transparent; color: #E4E4E7; font-family: inherit; font-size: 17px; font-weight: 500; text-align: left; cursor: pointer">macOS says the app can’t be opened. What now?<span data-rot="1" style="flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #A1A1AA; transition: transform .3s; transform: rotate(0deg)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button>
+<p hidden data-ans style="margin: 0; padding: 0 44px 22px 0; color: #A1A1AA; font-size: 15px">Captionate is ad-hoc signed, not notarized. Right-click Captionate.app → Open → Open. Or run: xattr -dr com.apple.quarantine /Applications/Captionate.app</p>
+</div>
+
+<div style="border-bottom: 1px solid rgba(255,255,255,0.08)">
+<button type="button" class="faqbtn" aria-expanded="false" data-faq style="width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; border: 0; background: transparent; color: #E4E4E7; font-family: inherit; font-size: 17px; font-weight: 500; text-align: left; cursor: pointer">A language says it’s unavailable on-device.<span data-rot="1" style="flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #A1A1AA; transition: transform .3s; transform: rotate(0deg)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button>
+<p hidden data-ans style="margin: 0; padding: 0 44px 22px 0; color: #A1A1AA; font-size: 15px">Add it in System Settings → Keyboard → Dictation → Languages, then generate again. On first use, allow the Speech Recognition permission prompt.</p>
+</div>
+
+<div style="border-bottom: 1px solid rgba(255,255,255,0.08)">
+<button type="button" class="faqbtn" aria-expanded="false" data-faq style="width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; border: 0; background: transparent; color: #E4E4E7; font-family: inherit; font-size: 17px; font-weight: 500; text-align: left; cursor: pointer">Which language should I pick for Hinglish?<span data-rot="1" style="flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #A1A1AA; transition: transform .3s; transform: rotate(0deg)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button>
+<p hidden data-ans style="margin: 0; padding: 0 44px 22px 0; color: #A1A1AA; font-size: 15px">English (India) handles Hinglish best. For pure Hindi, choose Hindi (India) to get Devanagari captions.</p>
+</div>
+
+<div style="border-bottom: 1px solid rgba(255,255,255,0.08)">
+<button type="button" class="faqbtn" aria-expanded="false" data-faq style="width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; border: 0; background: transparent; color: #E4E4E7; font-family: inherit; font-size: 17px; font-weight: 500; text-align: left; cursor: pointer">Can I edit captions after generating them?<span data-rot="1" style="flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #A1A1AA; transition: transform .3s; transform: rotate(0deg)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button>
+<p hidden data-ans style="margin: 0; padding: 0 44px 22px 0; color: #A1A1AA; font-size: 15px">Yes — fix text, nudge timings, add or delete lines. If a line keeps the same word count, word timings are preserved; otherwise highlight timing is spread evenly across the caption.</p>
+</div>
+
+<div style="border-bottom: 1px solid rgba(255,255,255,0.08)">
+<button type="button" class="faqbtn" aria-expanded="false" data-faq style="width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; border: 0; background: transparent; color: #E4E4E7; font-family: inherit; font-size: 17px; font-weight: 500; text-align: left; cursor: pointer">Can I bring in subtitles I already have?<span data-rot="1" style="flex: none; width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #A1A1AA; transition: transform .3s; transform: rotate(0deg)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button>
+<p hidden data-ans style="margin: 0; padding: 0 44px 22px 0; color: #A1A1AA; font-size: 15px">Yes. Import an .srt or .vtt file, restyle it, and burn it into your video — or re-export it.</p>
+</div>
+
+</div>
+</div>
+</section>
+
+<!-- FINAL CTA -->
+<section id="download" style="padding: 120px 24px 100px">
+<div style="max-width: 1200px; margin: 0 auto; position: relative; border-radius: 28px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); background: #0E0E11; padding: clamp(40px, 8vw, 96px) 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 24px">
+<div aria-hidden="true" style="position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px); background-size: 40px 40px; mask-image: radial-gradient(ellipse 60% 70% at 50% 100%, #000, transparent 70%); -webkit-mask-image: radial-gradient(ellipse 60% 70% at 50% 100%, #000, transparent 70%)"></div>
+<h2 style="position: relative; margin: 0; max-width: 820px; font-family: 'Instrument Serif', serif; font-weight: 400; font-size: clamp(42px, 7vw, 92px); line-height: 0.98; letter-spacing: -0.02em; color: #F4F4F5">Caption your next video <span style="font-style: italic; color: #FFD43B">tonight.</span></h2>
+<p style="position: relative; margin: 0; max-width: 520px; color: #A1A1AA; font-size: 17px">Free. Offline. Native to macOS. Drag Captionate into Applications and you’re done.</p>
+<div style="position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px">
+<a href="https://github.com/kos15/Captionate/raw/main/build/Captionate.dmg" class="btnp" style="display: inline-flex; align-items: center; gap: 10px; padding: 16px 26px; min-height: 52px; border-radius: 12px; background: #FFD43B; color: #09090B; font-weight: 600; font-size: 16px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
+Download Captionate.dmg
+</a>
+<a href="https://github.com/kos15/Captionate" target="_blank" rel="noopener" class="ghost" style="display: inline-flex; align-items: center; gap: 8px; padding: 16px 24px; min-height: 52px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); color: #EDEDEF; font-weight: 500; font-size: 16px"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.5 2 2 6.6 2 12.2c0 4.5 2.9 8.3 6.8 9.7.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5 4-1.4 6.8-5.2 6.8-9.7C22 6.6 17.5 2 12 2z"></path></svg>View on GitHub</a>
+</div>
+<p style="position: relative; margin: 0; font-family: 'Geist Mono', monospace; font-size: 12px; color: #8A8A93">Requires macOS 14 Sonoma or later · First launch: right-click → Open</p>
+</div>
+</section>
+
+<!-- FOOTER -->
+<footer style="border-top: 1px solid rgba(255,255,255,0.06); padding: 32px 24px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; font-size: 14px; color: #8A8A93">
+<div style="display: flex; align-items: center; gap: 10px; color: #D4D4D8; font-weight: 600">
+<svg width="22" height="22" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="8" fill="#16161A" stroke="rgba(255,255,255,0.14)"></rect><rect x="6" y="15" width="16" height="3" rx="1.5" fill="#EDEDEF"></rect><rect x="9" y="20" width="10" height="3" rx="1.5" fill="#FFD43B"></rect></svg>
+Captionate
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 20px">
+<a href="#features" style="color: #8A8A93">Features</a>
+<a href="#privacy" style="color: #8A8A93">Privacy</a>
+<a href="#faq" style="color: #8A8A93">FAQ</a>
+<a href="https://github.com/kos15/Captionate" target="_blank" rel="noopener" style="color: #8A8A93">GitHub</a>
+<a href="https://github.com/kos15/Captionate/raw/main/build/Captionate.dmg" style="color: #8A8A93">Download</a>
+</div>
+<span>© 2026 Captionate · Made for macOS</span>
+</div>
+</footer>
+
+</div>
+
+<script>
+(function(){
+var A='#FFD43B';
+var P=[
+ {frameW:'100%',aspect:'16 / 9',radius:'14px',pos:'flex-end',pad:'0 0 7% 0',maxW:'78%',boxPad:'8px 16px',box:'rgba(0,0,0,0.72)',font:"'Geist', sans-serif",weight:'600',fstyle:'normal',size:'clamp(16px, 2.2vw, 24px)',ls:'0',shadow:'none',spec:'Geist Semibold · 24pt · white · background box · bottom',upper:false,hl:false},
+ {frameW:'270px',aspect:'9 / 16',radius:'26px',pos:'center',pad:'0 0 10% 0',maxW:'88%',boxPad:'0',box:'transparent',font:"'Anton', Impact, sans-serif",weight:'400',fstyle:'normal',size:'34px',ls:'0.01em',shadow:'0 3px 0 #000, 0 0 14px rgba(0,0,0,0.75)',spec:'Anton · 34pt · white + shadow · centre · word highlight',upper:true,hl:true},
+ {frameW:'100%',aspect:'16 / 9',radius:'14px',pos:'flex-end',pad:'0 0 6% 0',maxW:'70%',boxPad:'0',box:'transparent',font:"'Instrument Serif', Georgia, serif",weight:'400',fstyle:'italic',size:'clamp(20px, 2.8vw, 32px)',ls:'0',shadow:'0 2px 12px rgba(0,0,0,0.8)',spec:'Instrument Serif Italic · 32pt · soft shadow · bottom',upper:false,hl:false}];
+var SW=['#FFD43B','#7CF0C5','#FF8A5B','#A7B4FF','#FF7AC6'];
+var st={preset:1,sw:0,upper:true,hl:true};
+var $=function(q){return document.querySelector(q)}, $$=function(q){return Array.prototype.slice.call(document.querySelectorAll(q))};
+var tabs=$$('[data-tab]'), sws=$$('[data-sw]'), frame=$('#frame'), cap=$('#cap');
+function setTrack(k,on,c){var t=$('[data-track="'+k+'"]'),n=$('[data-knob="'+k+'"]');t.style.background=on?c:'#3F3F46';n.style.transform='translateX('+(on?'16px':'0px')+')';}
+function apply(){
+ var p=P[st.preset], c=SW[st.sw];
+ tabs.forEach(function(b,i){var on=i===st.preset;b.setAttribute('aria-selected',on);b.style.color=on?'#FFFFFF':'#8A8A93';});
+ $('#pill').style.transform='translateX('+(st.preset*100)+'%)';
+ sws.forEach(function(b,i){var on=i===st.sw;b.setAttribute('aria-pressed',on);b.style.borderColor=on?'#FFFFFF':'transparent';});
+ var f=frame.style; f.width=p.frameW; f.aspectRatio=p.aspect; f.borderRadius=p.radius; f.justifyContent=p.pos; f.padding=p.pad; f.setProperty('--hl',c);
+ var s=cap.style; s.maxWidth=p.maxW; s.padding=p.boxPad; s.background=p.box; s.fontFamily=p.font; s.fontWeight=p.weight; s.fontStyle=p.fstyle; s.fontSize=p.size; s.letterSpacing=p.ls; s.textShadow=p.shadow; s.textTransform=st.upper?'uppercase':'none';
+ Array.prototype.forEach.call(cap.children,function(w){w.className=st.hl?'ks':'';});
+ $('#tgUpper').setAttribute('aria-pressed',st.upper); $('#tgHl').setAttribute('aria-pressed',st.hl);
+ setTrack('u',st.upper,c); setTrack('h',st.hl,c);
+ $('#spec').textContent=p.spec+(st.upper?' · UPPERCASE':'');
+}
+tabs.forEach(function(b,i){b.addEventListener('click',function(){st.preset=i;st.upper=P[i].upper;st.hl=P[i].hl;apply();});});
+sws.forEach(function(b,i){b.addEventListener('click',function(){st.sw=i;apply();});});
+$('#tgUpper').addEventListener('click',function(){st.upper=!st.upper;apply();});
+$('#tgHl').addEventListener('click',function(){st.hl=!st.hl;apply();});
+apply();
+var fb=$$('[data-faq]');
+function openFaq(k){fb.forEach(function(b,i){var on=i===k;b.setAttribute('aria-expanded',on);b.parentNode.querySelector('[data-ans]').hidden=!on;b.querySelector('[data-rot]').style.transform='rotate('+(on?45:0)+'deg)';});}
+var cur=0; fb.forEach(function(b,i){b.addEventListener('click',function(){cur=(cur===i)?-1:i;openFaq(cur);});}); openFaq(0);
+})();
+</script>
+</body>
+</html>
