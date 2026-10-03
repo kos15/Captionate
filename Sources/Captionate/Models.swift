@@ -80,7 +80,7 @@ struct CaptionStyle: Equatable {
     var highlightColor: Color = Color(red: 1.0, green: 0.82, blue: 0.1)
     var wordBackground: Bool = false       // box behind the active word (independent of wordHighlight)
     var wordBackgroundColor: Color = Color(red: 0.49, green: 0.3, blue: 1.0)
-    var animation: CaptionAnimation = .none
+    var effect: CaptionAnimation = .none   // not "animation": that clashes with Binding.animation(_:)
     var wordArt: WordArt = .none
     var artColor: Color = Color(red: 1.0, green: 0.25, blue: 0.6)      // outline / gradient end / glow
     var artDepthColor: Color = Color(red: 0.1, green: 0.05, blue: 0.3)  // 3D depth / comic outline

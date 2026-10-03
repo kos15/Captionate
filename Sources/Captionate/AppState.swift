@@ -223,7 +223,7 @@ final class AppState: ObservableObject {
         case "Typewriter":
             s.fontName = "Courier New"
             s.bold = true
-            s.animation = .typewriter
+            s.effect = .typewriter
             grouping = .standard
         case "Neon":
             s.fontName = "Avenir Next"
@@ -233,7 +233,7 @@ final class AppState: ObservableObject {
             s.uppercase = true
             s.wordArt = .neon
             s.artColor = Color(red: 0.1, green: 0.9, blue: 1.0)
-            s.animation = .popWords
+            s.effect = .popWords
             s.position = .middle
             grouping = .shortForm
         case "Comic":
@@ -244,7 +244,7 @@ final class AppState: ObservableObject {
             s.textColor = Color(red: 1.0, green: 0.85, blue: 0.1)
             s.wordArt = .comic
             s.artDepthColor = .black
-            s.animation = .bounce
+            s.effect = .bounce
             s.position = .middle
             grouping = .shortForm
         case "GradientPop":
@@ -255,7 +255,7 @@ final class AppState: ObservableObject {
             s.wordArt = .gradient
             s.textColor = Color(red: 1.0, green: 0.9, blue: 0.3)
             s.artColor = Color(red: 1.0, green: 0.3, blue: 0.5)
-            s.animation = .pop
+            s.effect = .pop
             s.position = .middle
             grouping = .shortForm
         case "Minimal":
