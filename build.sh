@@ -89,7 +89,9 @@ rm -rf "$STAGE"
 
 # Mount read-write, flag the custom volume icon and lay out the Finder window.
 hdiutil detach "/Volumes/$APP" -force >/dev/null 2>&1 || true
-MOUNT_DIR="$(hdiutil attach "$RW_DMG" -readwrite -noverify -noautoopen | awk -F'\t' '/\/Volumes\//{print $NF; exit}')"
+ATTACH_OUT="$(hdiutil attach "$RW_DMG" -readwrite -noverify -noautoopen)"
+MOUNT_DIR="$(echo "$ATTACH_OUT" | awk -F'\t' '/\/Volumes\//{print $NF; exit}')"
+DEVICE="$(echo "$ATTACH_OUT" | awk '/^\/dev\//{print $1; exit}')"
 [[ -d "$MOUNT_DIR" ]] || { echo "✗ Couldn't mount $RW_DMG" >&2; exit 1; }
 if command -v SetFile >/dev/null 2>&1; then
   SetFile -a C "$MOUNT_DIR"
@@ -126,7 +128,20 @@ fi
 
 chmod -Rf go-w "$MOUNT_DIR" || true
 sync
-hdiutil detach "$MOUNT_DIR" >/dev/null || hdiutil detach "$MOUNT_DIR" -force >/dev/null
+# Finder can hold the disk for a moment after closing its window: retry, then force.
+DETACHED=0
+for _ in 1 2 3 4 5 6; do
+  if hdiutil detach "$DEVICE" >/dev/null 2>&1; then DETACHED=1; break; fi
+  sleep 2
+done
+if [[ "$DETACHED" != "1" ]]; then
+  hdiutil detach "$DEVICE" -force >/dev/null 2>&1 || true
+  sleep 2
+fi
+if hdiutil info | grep -q "^$DEVICE"; then
+  echo "✗ Couldn't detach $DEVICE" >&2
+  exit 1
+fi
 hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 -o "$DMG" >/dev/null
 rm -f "$RW_DMG"
 
