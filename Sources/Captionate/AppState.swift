@@ -18,6 +18,14 @@ final class AppState: ObservableObject {
     @Published var segments: [CaptionSegment] = []
     @Published var style = CaptionStyle()
     @Published var grouping = GroupingOptions.standard
+    @Published var edit = EditOptions()
+
+    // Language tools
+    @Published var translationRequest: TranslationRequest?
+    @Published var translationTarget = "en"
+    @Published var isTranslating = false
+    @Published private(set) var hasTextBackup = false
+    private var textBackup: [CaptionSegment]?
     @Published var locale: Locale
 
     // Work status
@@ -42,6 +50,12 @@ final class AppState: ObservableObject {
         segments.first { currentTime >= $0.start && currentTime < $0.end }
     }
 
+    /// Shape of the output frame (preview + export).
+    var canvasAspect: CGSize {
+        if let r = edit.aspect.ratio { return CGSize(width: r, height: 1) }
+        return videoSize
+    }
+
     // MARK: - Loading
 
     func openPanel() {
@@ -57,6 +71,8 @@ final class AppState: ObservableObject {
         videoURL = url
         words = []
         segments = []
+        textBackup = nil
+        hasTextBackup = false
         currentTime = 0
 
         let player = AVPlayer(url: url)
@@ -127,6 +143,97 @@ final class AppState: ObservableObject {
         segments.removeAll { $0.id == id }
     }
 
+    /// Splits a caption into two, with `index` as the first word of the second one.
+    func split(_ id: CaptionSegment.ID, beforeWord index: Int) {
+        guard let i = segments.firstIndex(where: { $0.id == id }) else { return }
+        let seg = segments[i]
+        let words = seg.timedWords()
+        guard index > 0, index < words.count else { return }
+        var first = CaptionSegment(start: seg.start, end: words[index].start,
+                                   text: words[..<index].map(\.text).joined(separator: " "),
+                                   words: Array(words[..<index]))
+        var second = CaptionSegment(start: words[index].start, end: seg.end,
+                                    text: words[index...].map(\.text).joined(separator: " "),
+                                    words: Array(words[index...]))
+        for (k, o) in seg.overrides {
+            if k < index { first.overrides[k] = o } else { second.overrides[k - index] = o }
+        }
+        segments.replaceSubrange(i...i, with: [first, second])
+    }
+
+    func mergeWithNext(_ id: CaptionSegment.ID) {
+        guard let i = segments.firstIndex(where: { $0.id == id }), i + 1 < segments.count else { return }
+        let a = segments[i], b = segments[i + 1]
+        let wa = a.timedWords(), wb = b.timedWords()
+        var merged = CaptionSegment(start: a.start, end: max(a.end, b.end), text: a.text + " " + b.text,
+                                    words: wa + wb)
+        merged.overrides = a.overrides
+        for (k, o) in b.overrides { merged.overrides[k + wa.count] = o }
+        segments.replaceSubrange(i...(i + 1), with: [merged])
+    }
+
+    /// Replaces text in every caption; returns how many captions changed.
+    @discardableResult
+    func findReplace(_ find: String, with replacement: String, matchCase: Bool) -> Int {
+        guard !find.isEmpty else { return 0 }
+        var changed = 0
+        for i in segments.indices {
+            let new = segments[i].text.replacingOccurrences(
+                of: find, with: replacement, options: matchCase ? [] : [.caseInsensitive])
+            if new != segments[i].text {
+                segments[i].text = new
+                changed += 1
+            }
+        }
+        return changed
+    }
+
+    // MARK: - Language tools
+
+    private func backupText() {
+        guard textBackup == nil else { return }
+        textBackup = segments
+        hasTextBackup = true
+    }
+
+    func restoreOriginalText() {
+        if let backup = textBackup { segments = backup }
+        textBackup = nil
+        hasTextBackup = false
+    }
+
+    /// Transliterates every caption (e.g. Roman Hinglish ↔ Devanagari). Word timings are kept.
+    func convertScript(to script: TextTools.Script) {
+        backupText()
+        for i in segments.indices {
+            segments[i].text = TextTools.convert(segments[i].text, to: script)
+        }
+    }
+
+    func requestTranslation() {
+        guard !segments.isEmpty else { return }
+        backupText()
+        translationRequest = TranslationRequest(target: Locale.Language(identifier: translationTarget))
+    }
+
+    func applyTranslation(_ translations: [String: String]) {
+        for i in segments.indices {
+            guard let text = translations[segments[i].id.uuidString] else { continue }
+            segments[i].text = text
+            segments[i].words = []          // word count changed: highlight timing is spread evenly
+            segments[i].overrides = [:]
+        }
+    }
+
+    // MARK: - Music
+
+    func chooseMusic() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio, .mp3, .mpeg4Audio, .wav, .aiff]
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url { edit.musicURL = url }
+    }
+
     func addCaptionAtPlayhead() {
         let start = currentTime
         let seg = CaptionSegment(start: start, end: min(duration > 0 ? duration : start + 2, start + 2), text: "New caption")
@@ -161,12 +268,13 @@ final class AppState: ObservableObject {
     func exportVideo() {
         guard let src = videoURL, !segments.isEmpty, !isWorking,
               let out = savePanel(ext: "mp4") else { return }
-        let segments = self.segments, style = self.style
+        let segments = self.segments, style = self.style, edit = self.edit
         player?.pause()
-        start("Rendering captions into video…")
+        start(edit.cleanAudio || edit.normalizeLoudness ? "Cleaning audio and rendering…" : "Rendering captions into video…")
         workTask = Task {
             do {
-                try await VideoExporter.export(videoURL: src, segments: segments, style: style, to: out) { p in
+                try await VideoExporter.export(videoURL: src, segments: segments, style: style, edit: edit,
+                                               to: out) { p in
                     Task { @MainActor in self.progress = p }
                 }
                 NSWorkspace.shared.activateFileViewerSelecting([out])
@@ -201,72 +309,13 @@ final class AppState: ObservableObject {
 
     // MARK: - Presets
 
-    func applyPreset(_ name: String) {
-        var s = CaptionStyle()
-        switch name {
-        case "Shorts":
-            s.fontName = "Avenir Next"
-            s.fontScale = 0.065
-            s.showBackground = false
-            s.uppercase = true
-            s.wordHighlight = true
-            s.position = .middle
-            grouping = .shortForm
-        case "WordBox":
-            s.fontName = "Avenir Next"
-            s.fontScale = 0.065
-            s.showBackground = false
-            s.uppercase = true
-            s.wordBackground = true
-            s.position = .middle
-            grouping = .shortForm
-        case "Typewriter":
-            s.fontName = "Courier New"
-            s.bold = true
-            s.effect = .typewriter
-            grouping = .standard
-        case "Neon":
-            s.fontName = "Avenir Next"
-            s.fontScale = 0.065
-            s.showBackground = false
-            s.showShadow = false
-            s.uppercase = true
-            s.wordArt = .neon
-            s.artColor = Color(red: 0.1, green: 0.9, blue: 1.0)
-            s.effect = .popWords
-            s.position = .middle
-            grouping = .shortForm
-        case "Comic":
-            s.fontName = "Avenir Next"
-            s.fontScale = 0.07
-            s.showBackground = false
-            s.uppercase = true
-            s.textColor = Color(red: 1.0, green: 0.85, blue: 0.1)
-            s.wordArt = .comic
-            s.artDepthColor = .black
-            s.effect = .bounce
-            s.position = .middle
-            grouping = .shortForm
-        case "GradientPop":
-            s.fontName = "Avenir Next"
-            s.fontScale = 0.065
-            s.showBackground = false
-            s.uppercase = true
-            s.wordArt = .gradient
-            s.textColor = Color(red: 1.0, green: 0.9, blue: 0.3)
-            s.artColor = Color(red: 1.0, green: 0.3, blue: 0.5)
-            s.effect = .pop
-            s.position = .middle
-            grouping = .shortForm
-        case "Minimal":
-            s.fontScale = 0.045
-            s.bold = false
-            s.showBackground = false
-            grouping = .standard
-        default: // Classic
-            grouping = .standard
-        }
+    func applyPreset(_ preset: StylePreset) {
+        var s = preset.style
+        s.hookText = style.hookText
+        s.hookDuration = style.hookDuration
+        s.hookColor = style.hookColor
         style = s
+        grouping = preset.shortForm ? .shortForm : .standard
         regroup()
     }
 }

@@ -5,16 +5,23 @@ Native macOS app that captions your videos — fully on-device, free, no uploads
 **Flow:** drop a video → *Generate Captions* (Apple Speech, on-device) → edit text/timings → style → export a captioned `.mp4` or `.srt` / `.vtt`.
 
 ## Features
-- On-device transcription via Apple's Speech framework (English-India, Hindi and 50+ languages)
-- Editable caption list — fix words, nudge timings, add/delete, click to seek
-- Live preview that matches the export exactly
-- Styles: any installed font, bold, UPPERCASE, size, colour, shadow, background box, position, margin, width
-- **Word-by-word highlight** (karaoke style) for Shorts/Reels — colour the spoken word, put a coloured box behind it, or both (the two work independently)
-- **Animations:** fade in, pop, slide up, typewriter, word by word, pop each word, bounce the spoken word
-- **Word art:** outline, gradient, neon glow, 3D, comic — with custom effect colours
-- Presets: Classic, Shorts/Reels, Word Box, Minimal, Typewriter, Neon, Comic, Gradient Pop
-- Burn-in export with AVFoundation + Core Animation (hardware-encoded MP4, keeps original audio and rotation)
-- SRT / WebVTT export and import
+Everything runs on your Mac — no uploads, no account, no watermark.
+
+The sidebar is grouped by task:
+
+| Panel | What's in it |
+|---|---|
+| **Captions** | Editable caption list, click to seek, find & replace, merge/split captions, **word editor** (fix a word, retime it, recolour it, emphasise it) |
+| **Styles** | 37 ready-made looks — Hormozi, MrBeast, Word Pop, Big & Small, Editorial, Karaoke, Highlighted, Neon, Deep Glow, Glitch, Prism, Fire, Comic, Retro 3D, Bubble, Y2K, Cinematic, Podcast, News… |
+| **Text** | Any installed font, size, colour, shadow, UPPERCASE, caption box, **Big & small** (one big word per caption in its own font, the rest small), keyword emphasis, auto emoji, swear-word censoring |
+| **Effects** | Animations (fade, pop, slide up, typewriter, word by word, pop each word, bounce), word art (outline, gradient, neon, deep glow, glitch, prism, bubble, 3D, comic), spoken-word colour and word box |
+| **Layout** | Position, margin, width, **9:16 / 16:9 / 1:1 / 4:5** output (crop or fit), 720p–**4K**, hook title banner, caption length |
+| **Edit & Audio** | Remove silences and filler words (captions re-timed), auto zoom punch-ins, voice clean-up (hum & background noise), loudness levelling, background music |
+| **Language** | Transliterate between Roman, Devanagari and 11 more scripts (Hinglish ↔ हिन्दी), translate captions into 20 languages (on-device, macOS 15+), restore the original |
+
+Also: on-device transcription with Apple's Speech framework (English-India, Hindi and 50+ languages), live preview that matches the export exactly, hardware-encoded MP4, SRT / WebVTT import and export.
+
+Not included: cloud generative-AI features (AI avatars, eye-contact correction, generated B-roll or music, prompt-based editing) — they need server-side models, and Captionate never uploads your video.
 
 ## Install (build the DMG)
 Requires macOS 14+ and the Xcode Command Line Tools (`xcode-select --install`).
@@ -85,8 +92,14 @@ Sources/Captionate/
   Transcriber.swift     audio chunking + SFSpeechRecognizer (on-device)
   CaptionBuilder.swift  words → captions, SRT/VTT read/write
   VideoExporter.swift   burn-in renderer (CATextLayer timeline)
-  Views.swift           SwiftUI UI: player, overlay, list, style panel
-  Models.swift          Word, CaptionSegment, CaptionStyle
+  Views.swift           SwiftUI UI: player, preview overlay, caption list
+  Panels.swift          sidebar panels (styles, text, effects, layout, edit, language), word editor
+  StylePresets.swift    the style library
+  EditPlan.swift        silence / filler-word cuts and caption re-timing
+  AudioCleaner.swift    voice clean-up and loudness levelling
+  TextTools.swift       keywords, emoji, censoring, script conversion
+  Translation.swift     on-device caption translation (macOS 15+)
+  Models.swift          Word, CaptionSegment, CaptionStyle, EditOptions
 Resources/              Info.plist, AppIcon.icns, dmg/ (DMG backgrounds)
 build.sh                builds .app + .dmg
 ```

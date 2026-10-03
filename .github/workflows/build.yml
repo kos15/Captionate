@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       # Optional repo secrets — when set, the DMG is Developer ID signed + notarized
       # so macOS opens it without the "Apple could not verify…" warning.

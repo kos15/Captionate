@@ -5,7 +5,7 @@ import QuartzCore
 
 struct ContentView: View {
     @EnvironmentObject var state: AppState
-    @State private var tab = 0
+    @State private var panel: SidebarPanel = .captions
 
     var body: some View {
         HSplitView {
@@ -21,17 +21,19 @@ struct ContentView: View {
             .frame(minWidth: 560)
 
             VStack(spacing: 0) {
-                Picker("", selection: $tab) {
-                    Text("Captions").tag(0)
-                    Text("Style").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(10)
+                PanelTabBar(selection: $panel)
                 Divider()
-                if tab == 0 { CaptionListView() } else { StyleView() }
+                switch panel {
+                case .captions: CaptionListView()
+                case .styles: StylesPanel()
+                case .text: TextPanel()
+                case .effects: EffectsPanel()
+                case .layout: LayoutPanel()
+                case .edit: EditPanel()
+                case .language: LanguagePanel()
+                }
             }
-            .frame(minWidth: 330, idealWidth: 380, maxWidth: 520)
+            .frame(minWidth: 360, idealWidth: 400, maxWidth: 540)
         }
         .dropDestination(for: URL.self) { urls, _ in
             guard let url = urls.first else { return false }
@@ -61,6 +63,7 @@ struct ContentView: View {
         .overlay {
             if state.isWorking { WorkingOverlay() }
         }
+        .captionTranslation(state)
         .alert("Something went wrong",
                isPresented: Binding(get: { state.errorMessage != nil },
                                     set: { if !$0 { state.errorMessage = nil } })) {
@@ -105,10 +108,15 @@ struct PlayerPreview: View {
 
     var body: some View {
         GeometryReader { geo in
-            let rect = AVMakeRect(aspectRatio: state.videoSize,
+            let rect = AVMakeRect(aspectRatio: state.canvasAspect,
                                   insideRect: CGRect(origin: .zero, size: geo.size))
             ZStack(alignment: .topLeading) {
-                PlayerView(player: state.player)
+                Color.black
+                PlayerView(player: state.player,
+                           gravity: state.edit.fit == .fill ? .resizeAspectFill : .resizeAspect)
+                    .frame(width: rect.width, height: rect.height)
+                    .clipped()
+                    .offset(x: rect.minX, y: rect.minY)
                 CaptionOverlay(segment: state.activeSegment, time: state.currentTime,
                                style: state.style, size: rect.size)
                     .frame(width: rect.width, height: rect.height)
@@ -124,11 +132,12 @@ struct PlayerPreview: View {
 /// its `_AVKit_SwiftUI` class metadata fails to load outside an Xcode-built bundle.)
 struct PlayerView: NSViewRepresentable {
     let player: AVPlayer?
+    var gravity: AVLayerVideoGravity = .resizeAspect
 
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()
         view.controlsStyle = .floating
-        view.videoGravity = .resizeAspect
+        view.videoGravity = gravity
         view.showsFullScreenToggleButton = true
         view.player = player
         return view
@@ -136,6 +145,7 @@ struct PlayerView: NSViewRepresentable {
 
     func updateNSView(_ view: AVPlayerView, context: Context) {
         if view.player !== player { view.player = player }
+        if view.videoGravity != gravity { view.videoGravity = gravity }
     }
 }
 
@@ -183,6 +193,9 @@ final class CaptionLayerView: NSView {
             clock.sublayers?.forEach { $0.removeFromSuperlayer() }
             if let segment, let caption = CaptionLayers.segmentLayer(segment, style: style, renderSize: size) {
                 clock.addSublayer(caption)
+            }
+            if let hook = CaptionLayers.hookLayer(style: style, renderSize: size) {
+                clock.addSublayer(hook)
             }
             builtSegment = segment
             builtStyle = style
@@ -253,9 +266,35 @@ struct WorkingOverlay: View {
 
 struct CaptionListView: View {
     @EnvironmentObject var state: AppState
+    @State private var showFind = false
+    @State private var find = ""
+    @State private var replacement = ""
+    @State private var matchCase = false
+    @State private var findResult = ""
 
     var body: some View {
         VStack(spacing: 0) {
+            if showFind {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        TextField("Find", text: $find)
+                        TextField("Replace with", text: $replacement)
+                    }
+                    HStack {
+                        Toggle("Match case", isOn: $matchCase)
+                        Spacer()
+                        Text(findResult).foregroundStyle(.secondary).font(.caption)
+                        Button("Replace all") {
+                            let n = state.findReplace(find, with: replacement, matchCase: matchCase)
+                            findResult = n == 1 ? "1 caption changed" : "\(n) captions changed"
+                        }
+                        .disabled(find.isEmpty)
+                    }
+                }
+                .textFieldStyle(.roundedBorder)
+                .padding(10)
+                Divider()
+            }
             if state.segments.isEmpty {
                 VStack(spacing: 8) {
                     Text("No captions yet").font(.headline)
@@ -270,7 +309,9 @@ struct CaptionListView: View {
                         CaptionRow(seg: $seg,
                                    isActive: state.activeSegment?.id == seg.id,
                                    onSeek: { state.seek(to: seg.start) },
-                                   onDelete: { state.delete(seg.id) })
+                                   onDelete: { state.delete(seg.id) },
+                                   onSplit: { index in state.split(seg.id, beforeWord: index) },
+                                   onMergeNext: { state.mergeWithNext(seg.id) })
                     }
                 }
                 .listStyle(.inset)
@@ -281,6 +322,10 @@ struct CaptionListView: View {
                     Label("Add at playhead", systemImage: "plus")
                 }
                 .disabled(state.videoURL == nil)
+                Button { showFind.toggle() } label: {
+                    Label("Find & replace", systemImage: "magnifyingglass")
+                }
+                .disabled(state.segments.isEmpty)
                 Spacer()
                 Text("\(state.segments.count) captions").foregroundStyle(.secondary)
             }
@@ -294,6 +339,10 @@ struct CaptionRow: View {
     let isActive: Bool
     let onSeek: () -> Void
     let onDelete: () -> Void
+    let onSplit: (Int) -> Void
+    let onMergeNext: () -> Void
+    @State private var showWords = false
+    @State private var editingWord: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -311,11 +360,21 @@ struct CaptionRow: View {
                     .frame(width: 64)
                 Text("s").foregroundStyle(.secondary)
                 Spacer()
-                Button(role: .destructive, action: onDelete) {
-                    Image(systemName: "trash")
+                Button { showWords.toggle() } label: {
+                    Image(systemName: showWords ? "textformat.abc.dottedunderline" : "textformat.abc")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(showWords ? Color.accentColor : .secondary)
+                .help("Edit individual words")
+                Menu {
+                    Button("Merge with next caption", action: onMergeNext)
+                    Button("Delete caption", role: .destructive, action: onDelete)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
             }
             .font(.system(.caption, design: .monospaced))
             .textFieldStyle(.roundedBorder)
@@ -323,118 +382,15 @@ struct CaptionRow: View {
             TextField("Caption", text: $seg.text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...4)
+
+            if showWords {
+                WordChips(seg: $seg, editingWord: $editingWord, onSplit: onSplit)
+            }
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
         .background(isActive ? Color.accentColor.opacity(0.12) : Color.clear,
                     in: RoundedRectangle(cornerRadius: 6))
-    }
-}
-
-// MARK: - Style
-
-struct StyleView: View {
-    @EnvironmentObject var state: AppState
-    private let fonts = NSFontManager.shared.availableFontFamilies
-
-    var body: some View {
-        Form {
-            Section("Presets") {
-                HStack {
-                    Button("Classic") { state.applyPreset("Classic") }
-                    Button("Shorts / Reels") { state.applyPreset("Shorts") }
-                    Button("Minimal") { state.applyPreset("Minimal") }
-                    Button("Word Box") { state.applyPreset("WordBox") }
-                }
-                HStack {
-                    Button("Typewriter") { state.applyPreset("Typewriter") }
-                    Button("Neon") { state.applyPreset("Neon") }
-                    Button("Comic") { state.applyPreset("Comic") }
-                    Button("Gradient Pop") { state.applyPreset("GradientPop") }
-                }
-            }
-
-            Section("Text") {
-                Picker("Font", selection: $state.style.fontName) {
-                    ForEach(fonts, id: \.self) { Text($0).tag($0) }
-                }
-                Toggle("Bold", isOn: $state.style.bold)
-                Toggle("UPPERCASE", isOn: $state.style.uppercase)
-                LabeledSlider(label: "Size", value: $state.style.fontScale, range: 0.025...0.12)
-                ColorPicker("Text colour", selection: $state.style.textColor, supportsOpacity: false)
-                Toggle("Shadow", isOn: $state.style.showShadow)
-            }
-
-            Section {
-                Toggle("Colour the spoken word", isOn: $state.style.wordHighlight)
-                ColorPicker("Highlight colour", selection: $state.style.highlightColor, supportsOpacity: false)
-                    .disabled(!state.style.wordHighlight)
-                Toggle("Box behind the spoken word", isOn: $state.style.wordBackground)
-                ColorPicker("Word box colour", selection: $state.style.wordBackgroundColor, supportsOpacity: true)
-                    .disabled(!state.style.wordBackground)
-            } header: {
-                Text("Word-by-word highlight")
-            } footer: {
-                Text("Text colour and word box work independently — use either one or both.")
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Animation") {
-                Picker("Effect", selection: $state.style.effect) {
-                    ForEach(CaptionAnimation.allCases) { Text($0.rawValue).tag($0) }
-                }
-            }
-
-            Section("Word art") {
-                Picker("Style", selection: $state.style.wordArt) {
-                    ForEach(WordArt.allCases) { Text($0.rawValue).tag($0) }
-                }
-                switch state.style.wordArt {
-                case .outline:
-                    ColorPicker("Outline colour", selection: $state.style.artColor, supportsOpacity: false)
-                case .gradient:
-                    ColorPicker("Gradient end colour", selection: $state.style.artColor, supportsOpacity: false)
-                case .neon:
-                    ColorPicker("Glow colour", selection: $state.style.artColor, supportsOpacity: false)
-                case .extrude, .comic:
-                    ColorPicker("Depth colour", selection: $state.style.artDepthColor, supportsOpacity: false)
-                case .none:
-                    EmptyView()
-                }
-            }
-
-            Section("Background") {
-                Toggle("Background box", isOn: $state.style.showBackground)
-                ColorPicker("Box colour", selection: $state.style.backgroundColor, supportsOpacity: false)
-                    .disabled(!state.style.showBackground)
-                LabeledSlider(label: "Opacity", value: $state.style.backgroundOpacity, range: 0.1...1)
-                    .disabled(!state.style.showBackground)
-            }
-
-            Section("Layout") {
-                Picker("Position", selection: $state.style.position) {
-                    ForEach(CaptionPosition.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                LabeledSlider(label: "Margin", value: $state.style.verticalMargin, range: 0...0.3)
-                LabeledSlider(label: "Max width", value: $state.style.maxWidth, range: 0.4...0.98)
-            }
-
-            Section {
-                Stepper("Max characters: \(state.grouping.maxChars)",
-                        value: $state.grouping.maxChars, in: 8...80, step: 2)
-                Stepper("Max words: \(state.grouping.maxWords)",
-                        value: $state.grouping.maxWords, in: 1...20)
-                Button("Re-split captions") { state.regroup() }
-                    .disabled(state.words.isEmpty)
-            } header: {
-                Text("Caption length")
-            } footer: {
-                Text("Re-splitting rebuilds captions from the transcript and discards manual text edits.")
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
     }
 }
 
