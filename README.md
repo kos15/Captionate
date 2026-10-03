@@ -38,10 +38,39 @@ To edit the built-in patterns, change and run `Resources/dmg/make_backgrounds.py
 
 Or let GitHub do it — `.github/workflows/build.yml` builds the DMG on a macOS runner on every push to `main` that touches the app, uploads it as an artifact, and commits the fresh `build/Captionate.dmg` (the file the website's Download button serves). Run it by hand from the Actions tab to choose a background.
 
-### First launch
-The app is ad-hoc signed, not notarized. If macOS says it can't be opened:
-right-click **Captionate.app → Open → Open**, or run
-`xattr -dr com.apple.quarantine /Applications/Captionate.app`.
+### First launch ("Apple could not verify Captionate…")
+Builds without a Developer ID are ad-hoc signed and not notarized, so Gatekeeper shows
+*"Apple could not verify "Captionate" is free of malware…"*. The app is safe — the source is right here. To open it:
+
+- **macOS 15 Sequoia and later:** double-click Captionate, click **Done**, then open
+  **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to Captionate, and confirm.
+- **macOS 14 Sonoma:** right-click **Captionate.app → Open → Open**.
+- **Any version (Terminal):** `xattr -dr com.apple.quarantine /Applications/Captionate.app`
+
+You only need to do this once.
+
+### Removing the warning for everyone (signing + notarization)
+Gatekeeper only trusts apps signed with an Apple **Developer ID** and notarized by Apple — this
+needs an [Apple Developer Program](https://developer.apple.com/programs/) membership.
+`build.sh` does the rest automatically:
+
+```bash
+xcrun notarytool store-credentials captionate --apple-id you@example.com --team-id TEAMID
+SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" NOTARY_PROFILE=captionate ./build.sh
+```
+
+For the GitHub workflow, add these repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `MACOS_CERTIFICATE` | `base64 -i DeveloperID.p12` — your exported *Developer ID Application* certificate |
+| `MACOS_CERTIFICATE_PASSWORD` | the .p12 export password |
+| `SIGN_IDENTITY` | `Developer ID Application: Your Name (TEAMID)` |
+| `APPLE_ID` | your Apple ID email |
+| `APPLE_TEAM_ID` | your 10-character Team ID |
+| `APPLE_APP_PASSWORD` | an app-specific password from appleid.apple.com |
+
+With those set, every CI build is signed, notarized and stapled, and opens with no warning.
 
 On first transcription macOS asks for Speech Recognition permission — allow it.
 If a language says it's unavailable on-device, add it in **System Settings → Keyboard → Dictation → Languages**.
