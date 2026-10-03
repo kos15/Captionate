@@ -153,10 +153,18 @@ struct CaptionOverlay: NSViewRepresentable {
     }
 }
 
+/// Hosts the export's layers for the active caption. The layer clock is frozen (speed 0) and
+/// scrubbed to the playhead, so highlights and animations look exactly as they will in the export.
 final class CaptionLayerView: NSView {
+    private let clock = CALayer()
+    private var builtSegment: CaptionSegment?
+    private var builtStyle: CaptionStyle?
+    private var builtSize: CGSize = .zero
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        clock.speed = 0
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -169,10 +177,18 @@ final class CaptionLayerView: NSView {
         guard let root = layer else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        root.sublayers?.forEach { $0.removeFromSuperlayer() }
-        if let segment, size.width > 0, size.height > 0 {
-            root.addSublayer(CaptionLayers.still(segment: segment, time: time, style: style, renderSize: size))
+        if clock.superlayer !== root { root.addSublayer(clock) }
+        if segment != builtSegment || style != builtStyle || size != builtSize {
+            clock.frame = CGRect(origin: .zero, size: size)
+            clock.sublayers?.forEach { $0.removeFromSuperlayer() }
+            if let segment, let caption = CaptionLayers.segmentLayer(segment, style: style, renderSize: size) {
+                clock.addSublayer(caption)
+            }
+            builtSegment = segment
+            builtStyle = style
+            builtSize = size
         }
+        clock.timeOffset = time
         CATransaction.commit()
     }
 }
@@ -330,6 +346,12 @@ struct StyleView: View {
                     Button("Minimal") { state.applyPreset("Minimal") }
                     Button("Word Box") { state.applyPreset("WordBox") }
                 }
+                HStack {
+                    Button("Typewriter") { state.applyPreset("Typewriter") }
+                    Button("Neon") { state.applyPreset("Neon") }
+                    Button("Comic") { state.applyPreset("Comic") }
+                    Button("Gradient Pop") { state.applyPreset("GradientPop") }
+                }
             }
 
             Section("Text") {
@@ -355,6 +377,30 @@ struct StyleView: View {
             } footer: {
                 Text("Text colour and word box work independently — use either one or both.")
                     .foregroundStyle(.secondary)
+            }
+
+            Section("Animation") {
+                Picker("Effect", selection: $state.style.animation) {
+                    ForEach(CaptionAnimation.allCases) { Text($0.rawValue).tag($0) }
+                }
+            }
+
+            Section("Word art") {
+                Picker("Style", selection: $state.style.wordArt) {
+                    ForEach(WordArt.allCases) { Text($0.rawValue).tag($0) }
+                }
+                switch state.style.wordArt {
+                case .outline:
+                    ColorPicker("Outline colour", selection: $state.style.artColor, supportsOpacity: false)
+                case .gradient:
+                    ColorPicker("Gradient end colour", selection: $state.style.artColor, supportsOpacity: false)
+                case .neon:
+                    ColorPicker("Glow colour", selection: $state.style.artColor, supportsOpacity: false)
+                case .extrude, .comic:
+                    ColorPicker("Depth colour", selection: $state.style.artDepthColor, supportsOpacity: false)
+                case .none:
+                    EmptyView()
+                }
             }
 
             Section("Background") {

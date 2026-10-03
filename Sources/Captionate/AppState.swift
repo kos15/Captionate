@@ -61,7 +61,7 @@ final class AppState: ObservableObject {
 
         let player = AVPlayer(url: url)
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.05, preferredTimescale: 600), queue: .main
+            forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main
         ) { [weak self] t in
             MainActor.assumeIsolated { self?.currentTime = t.seconds }
         }
@@ -218,6 +218,44 @@ final class AppState: ObservableObject {
             s.showBackground = false
             s.uppercase = true
             s.wordBackground = true
+            s.position = .middle
+            grouping = .shortForm
+        case "Typewriter":
+            s.fontName = "Courier New"
+            s.bold = true
+            s.animation = .typewriter
+            grouping = .standard
+        case "Neon":
+            s.fontName = "Avenir Next"
+            s.fontScale = 0.065
+            s.showBackground = false
+            s.showShadow = false
+            s.uppercase = true
+            s.wordArt = .neon
+            s.artColor = Color(red: 0.1, green: 0.9, blue: 1.0)
+            s.animation = .popWords
+            s.position = .middle
+            grouping = .shortForm
+        case "Comic":
+            s.fontName = "Avenir Next"
+            s.fontScale = 0.07
+            s.showBackground = false
+            s.uppercase = true
+            s.textColor = Color(red: 1.0, green: 0.85, blue: 0.1)
+            s.wordArt = .comic
+            s.artDepthColor = .black
+            s.animation = .bounce
+            s.position = .middle
+            grouping = .shortForm
+        case "GradientPop":
+            s.fontName = "Avenir Next"
+            s.fontScale = 0.065
+            s.showBackground = false
+            s.uppercase = true
+            s.wordArt = .gradient
+            s.textColor = Color(red: 1.0, green: 0.9, blue: 0.3)
+            s.artColor = Color(red: 1.0, green: 0.3, blue: 0.5)
+            s.animation = .pop
             s.position = .middle
             grouping = .shortForm
         case "Minimal":

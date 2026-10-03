@@ -40,9 +40,33 @@ enum CaptionPosition: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// How a caption (or its words) comes on screen.
+enum CaptionAnimation: String, CaseIterable, Identifiable {
+    case none = "None"
+    case fade = "Fade in"
+    case pop = "Pop"
+    case slideUp = "Slide up"
+    case typewriter = "Typewriter"
+    case wordByWord = "Word by word"
+    case popWords = "Pop each word"
+    case bounce = "Bounce spoken word"
+    var id: String { rawValue }
+}
+
+/// Decorative text treatments.
+enum WordArt: String, CaseIterable, Identifiable {
+    case none = "None"
+    case outline = "Outline"
+    case gradient = "Gradient"
+    case neon = "Neon glow"
+    case extrude = "3D"
+    case comic = "Comic"
+    var id: String { rawValue }
+}
+
 /// Visual style shared by the live preview and the burned-in export.
 /// Sizes are relative to the video height so preview == export.
-struct CaptionStyle {
+struct CaptionStyle: Equatable {
     var fontName: String = "Helvetica Neue"
     var bold: Bool = true
     var fontScale: Double = 0.055          // font size as fraction of video height
@@ -56,6 +80,10 @@ struct CaptionStyle {
     var highlightColor: Color = Color(red: 1.0, green: 0.82, blue: 0.1)
     var wordBackground: Bool = false       // box behind the active word (independent of wordHighlight)
     var wordBackgroundColor: Color = Color(red: 0.49, green: 0.3, blue: 1.0)
+    var animation: CaptionAnimation = .none
+    var wordArt: WordArt = .none
+    var artColor: Color = Color(red: 1.0, green: 0.25, blue: 0.6)      // outline / gradient end / glow
+    var artDepthColor: Color = Color(red: 0.1, green: 0.05, blue: 0.3)  // 3D depth / comic outline
     var position: CaptionPosition = .bottom
     var verticalMargin: Double = 0.08      // fraction of video height
     var maxWidth: Double = 0.85            // fraction of video width
@@ -69,9 +97,6 @@ struct CaptionStyle {
     }
 
     func displayText(_ s: String) -> String { uppercase ? s.uppercased() : s }
-
-    /// True when captions must track the active word (text colour and/or box).
-    var tracksActiveWord: Bool { wordHighlight || wordBackground }
 }
 
 /// How words are grouped into captions.
