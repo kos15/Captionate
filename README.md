@@ -10,7 +10,9 @@ Native macOS app that captions your videos — fully on-device, free, no uploads
 - Live preview that matches the export exactly
 - Styles: any installed font, bold, UPPERCASE, size, colour, shadow, background box, position, margin, width
 - **Word-by-word highlight** (karaoke style) for Shorts/Reels — colour the spoken word, put a coloured box behind it, or both (the two work independently)
-- Presets: Classic, Shorts/Reels, Word Box, Minimal
+- **Animations:** fade in, pop, slide up, typewriter, word by word, pop each word, bounce the spoken word
+- **Word art:** outline, gradient, neon glow, 3D, comic — with custom effect colours
+- Presets: Classic, Shorts/Reels, Word Box, Minimal, Typewriter, Neon, Comic, Gradient Pop
 - Burn-in export with AVFoundation + Core Animation (hardware-encoded MP4, keeps original audio and rotation)
 - SRT / WebVTT export and import
 
