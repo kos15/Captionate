@@ -175,7 +175,7 @@ enum CaptionLayers {
         let content = CALayer()
         content.frame = container.bounds
         container.addSublayer(content)
-        addEntrance(style.animation, to: content, start: seg.start, duration: seg.end - seg.start, fontSize: fontSize)
+        addEntrance(style.effect, to: content, start: seg.start, duration: seg.end - seg.start, fontSize: fontSize)
 
         if style.showBackground {
             let bg = CALayer()
@@ -229,7 +229,7 @@ enum CaptionLayers {
                 group.addSublayer(hi)
             }
 
-            addWordAnimation(style.animation, to: group, start: start, end: end, line: line,
+            addWordAnimation(style.effect, to: group, start: start, end: end, line: line,
                              length: (words[i] as NSString).length, bleed: bleed)
             texts.addSublayer(group)
         }

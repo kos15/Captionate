@@ -380,7 +380,7 @@ struct StyleView: View {
             }
 
             Section("Animation") {
-                Picker("Effect", selection: $state.style.animation) {
+                Picker("Effect", selection: $state.style.effect) {
                     ForEach(CaptionAnimation.allCases) { Text($0.rawValue).tag($0) }
                 }
             }

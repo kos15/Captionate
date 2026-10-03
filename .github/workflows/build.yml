@@ -8,6 +8,13 @@ on:
       - "Resources/**"
       - "Package.swift"
       - "build.sh"
+  pull_request:
+    paths:
+      - "Sources/**"
+      - "Resources/**"
+      - "Package.swift"
+      - "build.sh"
+      - ".github/workflows/build.yml"
   workflow_dispatch:
     inputs:
       background:
@@ -64,7 +71,7 @@ jobs:
           path: build/Captionate.dmg
 
       - name: Commit the fresh DMG (served by the website's Download button)
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
