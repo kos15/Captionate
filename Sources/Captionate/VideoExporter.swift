@@ -22,6 +22,7 @@ enum VideoExporter {
     static func export(videoURL: URL,
                        segments: [CaptionSegment],
                        style: CaptionStyle,
+                       edit: EditOptions,
                        to outURL: URL,
                        progress: @escaping (Double) -> Void) async throws {
         let asset = AVURLAsset(url: videoURL)
@@ -32,24 +33,99 @@ enum VideoExporter {
         let transform = try await srcVideo.load(.preferredTransform)
         let fps = try await srcVideo.load(.nominalFrameRate)
         let videoRange = try await srcVideo.load(.timeRange)
+        let duration = try await asset.load(.duration).seconds
 
-        // Composition: original video + all audio tracks.
+        // Smart cuts (silences / filler words) and captions re-timed to match.
+        let plan = EditPlan.make(segments: segments, duration: duration, options: edit)
+        let captions = plan.apply(to: segments, dropFillers: edit.removeFillers)
+
+        // Audio sources: a cleaned copy of the first track, or the original tracks.
+        // `range` is in source-video time; source time - `offset` = time within `track`.
+        var audioSources: [(track: AVAssetTrack, range: CMTimeRange, offset: CMTime)] = []
+        var cleanedURL: URL?
+        defer { if let cleanedURL { try? FileManager.default.removeItem(at: cleanedURL) } }
+        let originalAudio = try await asset.loadTracks(withMediaType: .audio)
+        var progressBase = 0.0
+        if edit.cleanAudio || edit.normalizeLoudness, let first = originalAudio.first,
+           let url = try await AudioCleaner.process(videoURL, denoise: edit.cleanAudio,
+                                                    normalize: edit.normalizeLoudness) {
+            cleanedURL = url
+            progressBase = 0.15
+            progress(progressBase)
+            let cleaned = AVURLAsset(url: url)
+            if let track = try await cleaned.loadTracks(withMediaType: .audio).first {
+                let origStart = try await first.load(.timeRange).start
+                let range = try await track.load(.timeRange)
+                audioSources.append((track, CMTimeRange(start: range.start + origStart, duration: range.duration), origStart))
+            }
+        }
+        if audioSources.isEmpty {
+            for track in originalAudio {
+                let range = try await track.load(.timeRange)
+                audioSources.append((track, range, CMTime.zero))
+            }
+        }
+
+        // Composition: the kept pieces, back to back.
         let comp = AVMutableComposition()
         guard let compVideo = comp.addMutableTrack(withMediaType: .video,
                                                    preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw VideoExportError.sessionFailed("couldn't create video track")
         }
-        try compVideo.insertTimeRange(videoRange, of: srcVideo, at: videoRange.start)
-        for audio in try await asset.loadTracks(withMediaType: .audio) {
-            let range = try await audio.load(.timeRange)
-            if let t = comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
-                try t.insertTimeRange(range, of: audio, at: range.start)
+        let compAudio = audioSources.map { _ in
+            comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+        }
+        var cursor = CMTime.zero
+        for r in plan.kept {
+            let piece = CMTimeRange(start: CMTime(seconds: r.lowerBound, preferredTimescale: 600),
+                                    end: CMTime(seconds: r.upperBound, preferredTimescale: 600))
+            let v = piece.intersection(videoRange)
+            if !v.isEmpty { try compVideo.insertTimeRange(v, of: srcVideo, at: cursor + (v.start - piece.start)) }
+            for (src, dst) in zip(audioSources, compAudio) {
+                let a = piece.intersection(src.range)
+                guard let dst, !a.isEmpty else { continue }
+                try dst.insertTimeRange(CMTimeRange(start: a.start - src.offset, duration: a.duration),
+                                        of: src.track, at: cursor + (a.start - piece.start))
+            }
+            cursor = cursor + piece.duration
+        }
+        let total = comp.duration
+
+        // Background music, looped to length, with a fade-out.
+        var mixParameters: [AVMutableAudioMixInputParameters] = []
+        if let musicURL = edit.musicURL {
+            let music = AVURLAsset(url: musicURL)
+            if let track = try await music.loadTracks(withMediaType: .audio).first,
+               let dst = comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
+                let range = try await track.load(.timeRange)
+                var at = CMTime.zero
+                while at < total && range.duration.seconds > 0.5 {
+                    let length = min(range.duration, total - at)
+                    try dst.insertTimeRange(CMTimeRange(start: range.start, duration: length), of: track, at: at)
+                    at = at + length
+                }
+                let params = AVMutableAudioMixInputParameters(track: dst)
+                let volume = Float(edit.musicVolume)
+                params.setVolume(volume, at: .zero)
+                let fade = CMTime(seconds: min(2, total.seconds / 4), preferredTimescale: 600)
+                params.setVolumeRamp(fromStartVolume: volume, toEndVolume: 0,
+                                     timeRange: CMTimeRange(start: total - fade, duration: fade))
+                mixParameters.append(params)
             }
         }
 
-        // Render size honours rotation (e.g. portrait iPhone footage).
+        // Output canvas: aspect ratio + resolution, video filled (cropped) or fitted inside.
         let rotated = CGRect(origin: .zero, size: naturalSize).applying(transform)
-        let renderSize = CGSize(width: evenRound(abs(rotated.width)), height: evenRound(abs(rotated.height)))
+        let source = CGSize(width: abs(rotated.width), height: abs(rotated.height))
+        let renderSize = canvasSize(source: source, edit: edit)
+        let scale = edit.fit == .fill
+            ? max(renderSize.width / source.width, renderSize.height / source.height)
+            : min(renderSize.width / source.width, renderSize.height / source.height)
+        let base = transform
+            .concatenating(CGAffineTransform(translationX: -rotated.minX, y: -rotated.minY))
+            .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+            .concatenating(CGAffineTransform(translationX: (renderSize.width - source.width * scale) / 2,
+                                             y: (renderSize.height - source.height * scale) / 2))
 
         let videoComposition = AVMutableVideoComposition()
         videoComposition.renderSize = renderSize
@@ -57,9 +133,11 @@ enum VideoExporter {
         videoComposition.frameDuration = CMTime(value: 1, timescale: timescale)
 
         let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: comp.duration)
+        instruction.timeRange = CMTimeRange(start: .zero, duration: total)
+        instruction.backgroundColor = edit.canvasColor.cgColorValue
         let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideo)
-        layerInstruction.setTransform(transform, at: .zero)
+        layerInstruction.setTransform(base, at: .zero)
+        if edit.autoZoom { addZooms(to: layerInstruction, base: base, canvas: renderSize, captions: captions) }
         instruction.layerInstructions = [layerInstruction]
         videoComposition.instructions = [instruction]
 
@@ -70,7 +148,7 @@ enum VideoExporter {
         let videoLayer = CALayer()
         videoLayer.frame = frame
         parent.addSublayer(videoLayer)
-        for layer in CaptionLayers.make(segments: segments, style: style, renderSize: renderSize) {
+        for layer in CaptionLayers.make(segments: captions, style: style, renderSize: renderSize) {
             parent.addSublayer(layer)
         }
         videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(
@@ -81,13 +159,18 @@ enum VideoExporter {
         }
         try? FileManager.default.removeItem(at: outURL)
         session.videoComposition = videoComposition
+        if !mixParameters.isEmpty {
+            let mix = AVMutableAudioMix()
+            mix.inputParameters = mixParameters
+            session.audioMix = mix
+        }
         session.outputURL = outURL
         session.outputFileType = outURL.pathExtension.lowercased() == "mov" ? .mov : .mp4
         session.shouldOptimizeForNetworkUse = true
 
         let ticker = Task {
             while !Task.isCancelled {
-                progress(Double(session.progress))
+                progress(progressBase + (1 - progressBase) * Double(session.progress))
                 try? await Task.sleep(nanoseconds: 200_000_000)
             }
         }
@@ -108,6 +191,34 @@ enum VideoExporter {
         }
     }
 
+    /// Output size for the chosen aspect ratio and resolution (even dimensions for the encoder).
+    static func canvasSize(source: CGSize, edit: EditOptions) -> CGSize {
+        let ratio = edit.aspect.ratio ?? source.width / max(source.height, 1)
+        let short = edit.resolution.shortSide ?? min(source.width, source.height)
+        let size = ratio >= 1 ? CGSize(width: short * ratio, height: short)
+                              : CGSize(width: short, height: short / ratio)
+        return CGSize(width: evenRound(size.width), height: evenRound(size.height))
+    }
+
+    /// Gentle punch-in zooms on every other caption, like an editor's jump-zooms.
+    private static func addZooms(to layer: AVMutableVideoCompositionLayerInstruction, base: CGAffineTransform,
+                                 canvas: CGSize, captions: [CaptionSegment]) {
+        let cx = canvas.width / 2, cy = canvas.height / 2
+        let zoom = base
+            .concatenating(CGAffineTransform(translationX: -cx, y: -cy))
+            .concatenating(CGAffineTransform(scaleX: 1.12, y: 1.12))
+            .concatenating(CGAffineTransform(translationX: cx, y: cy))
+        func time(_ s: Double) -> CMTime { CMTime(seconds: s, preferredTimescale: 600) }
+        var last = 0.0
+        for (i, caption) in captions.enumerated() where i % 2 == 1 {
+            let a = max(caption.start, last), b = caption.end
+            guard b - a > 0.8 else { continue }
+            layer.setTransformRamp(fromStart: base, toEnd: zoom, timeRange: CMTimeRange(start: time(a), end: time(a + 0.25)))
+            layer.setTransformRamp(fromStart: zoom, toEnd: base, timeRange: CMTimeRange(start: time(b - 0.25), end: time(b)))
+            last = b
+        }
+    }
+
     private static func evenRound(_ v: CGFloat) -> CGFloat {
         let r = Int(v.rounded())
         return CGFloat(r % 2 == 0 ? r : r + 1)
@@ -121,11 +232,42 @@ enum VideoExporter {
 /// Core Animation timings in video seconds — the export plays them, the preview freezes them at the playhead.
 enum CaptionLayers {
     static func make(segments: [CaptionSegment], style: CaptionStyle, renderSize: CGSize) -> [CALayer] {
-        segments.compactMap { $0.end > $0.start ? segmentLayer($0, style: style, renderSize: renderSize) : nil }
+        var layers = segments.compactMap { $0.end > $0.start ? segmentLayer($0, style: style, renderSize: renderSize) : nil }
+        if let hook = hookLayer(style: style, renderSize: renderSize) { layers.append(hook) }
+        return layers
+    }
+
+    /// The hook title: a bold headline banner at the top for the first few seconds.
+    static func hookLayer(style: CaptionStyle, renderSize: CGSize) -> CALayer? {
+        let text = style.hookText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, style.hookDuration > 0 else { return nil }
+        var s = style
+        s.position = .top
+        s.verticalMargin = 0.07
+        s.showBackground = true
+        s.backgroundColor = style.hookColor
+        s.backgroundOpacity = 1
+        s.textColor = .white
+        s.fontScale = style.fontScale * 0.9
+        s.maxWidth = 0.8
+        s.wordHighlight = false
+        s.wordBackground = false
+        s.autoEmphasis = false
+        s.autoEmoji = false
+        s.wordArt = .none
+        s.effect = .pop
+        return segmentLayer(CaptionSegment(start: 0, end: style.hookDuration, text: text), style: s, renderSize: renderSize)
+    }
+
+    /// The word as drawn: censored, cased, with an emoji when enabled.
+    private static func displayWord(_ word: String, style: CaptionStyle) -> String {
+        var s = style.displayText(style.censorProfanity ? TextTools.censor(word) : word)
+        if style.autoEmoji, let emoji = TextTools.emoji(for: word) { s += " " + emoji }
+        return s
     }
 
     private struct Placement {
-        var x, baseline, width, ascent, descent: CGFloat
+        var x, baseline, width: CGFloat
     }
 
     static func segmentLayer(_ seg: CaptionSegment, style: CaptionStyle, renderSize: CGSize) -> CALayer? {
@@ -133,15 +275,46 @@ enum CaptionLayers {
         guard !tokens.isEmpty, renderSize.width > 0, renderSize.height > 0 else { return nil }
         let fontSize = CGFloat(style.fontScale) * renderSize.height
         let font = style.nsFont(size: fontSize) as CTFont
+        let emphasisFont = style.nsFont(size: fontSize * CGFloat(style.emphasisScale)) as CTFont
         let attrs = textAttributes(font)
-        let words = tokens.map { style.displayText($0.text) }
+
+        // "Big & small": one hero word, large in its own font on its own line; the rest smaller.
+        let hero = style.heroWord ? TextTools.heroIndex(tokens, overrides: seg.overrides) : nil
+        let heroAttrs = textAttributes(style.heroFont(size: fontSize * CGFloat(style.heroScale)) as CTFont)
+        let smallAttrs = textAttributes(style.nsFont(size: fontSize * CGFloat(style.smallScale)) as CTFont)
+        let smallEmphasisAttrs = textAttributes(
+            style.nsFont(size: fontSize * CGFloat(style.smallScale * style.emphasisScale)) as CTFont)
+
+        // Per-word text, font and colour (word editor overrides win over automatic emphasis).
+        var words: [String] = [], wordAttrs: [[NSAttributedString.Key: Any]] = [], fills: [CGColor] = []
+        for (i, token) in tokens.enumerated() {
+            let override = seg.overrides[i]
+            words.append(displayWord(token.text, style: style))
+            if let hero {
+                if i == hero {
+                    wordAttrs.append(heroAttrs)
+                    fills.append((override?.color ?? style.heroColor).cgColorValue)
+                    continue
+                }
+                let emphasized = override?.emphasis ?? false
+                wordAttrs.append(emphasized ? smallEmphasisAttrs : smallAttrs)
+                fills.append((override?.color ?? (emphasized ? style.emphasisColor : style.textColor)).cgColorValue)
+                continue
+            }
+            let emphasized = override?.emphasis ?? (style.autoEmphasis && TextTools.isKeyword(token.text))
+            wordAttrs.append(emphasized ? textAttributes(emphasisFont) : attrs)
+            fills.append((override?.color ?? (emphasized ? style.emphasisColor : style.textColor)).cgColorValue)
+        }
 
         // Lay out the whole caption once to find where each word sits.
         let full = NSMutableAttributedString()
         var ranges: [NSRange] = []
         for (i, w) in words.enumerated() {
-            if i > 0 { full.append(NSAttributedString(string: " ", attributes: attrs)) }
-            let word = NSAttributedString(string: w, attributes: attrs)
+            if i > 0 {
+                let breaksLine = hero.map { i == $0 || i == $0 + 1 } ?? false
+                full.append(NSAttributedString(string: breaksLine ? "\n" : " ", attributes: hero == nil ? attrs : smallAttrs))
+            }
+            let word = NSAttributedString(string: w, attributes: wordAttrs[i])
             ranges.append(NSRange(location: full.length, length: word.length))
             full.append(word)
         }
@@ -193,8 +366,11 @@ enum CaptionLayers {
         let bleed = ceil(fontSize * 0.45)   // room for shadow, outline, glow and 3D depth
         for (i, range) in ranges.enumerated() {
             guard let p = place(range, lines: lines, origins: origins) else { continue }
-            let wordRect = CGRect(x: padX + p.x, y: padY + p.baseline - p.descent,
-                                  width: p.width, height: p.ascent + p.descent)
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: words[i], attributes: wordAttrs[i]))
+            var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+            CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
+            let wordRect = CGRect(x: padX + p.x, y: padY + p.baseline - descent,
+                                  width: p.width, height: ascent + descent)
             let start = i == 0 ? seg.start : max(seg.start, tokens[i].start)
             let end = i == tokens.count - 1 ? seg.end : min(seg.end, tokens[i + 1].start)
 
@@ -209,14 +385,12 @@ enum CaptionLayers {
 
             let group = CALayer()
             group.frame = wordRect.insetBy(dx: -bleed, dy: -bleed)
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: words[i], attributes: attrs))
-            let origin = CGPoint(x: bleed, y: bleed + p.descent)
+            let origin = CGPoint(x: bleed, y: bleed + descent)
 
             let normal = CALayer()
             normal.frame = group.bounds
             normal.contents = wordImage(line, size: group.bounds.size, origin: origin,
-                                        fill: style.textColor.cgColorValue,
-                                        gradient: style.wordArt == .gradient, style: style, fontSize: fontSize)
+                                        fill: fills[i], gradient: true, style: style, fontSize: fontSize)
             group.addSublayer(normal)
 
             if style.wordHighlight && end > start {
@@ -256,16 +430,15 @@ enum CaptionLayers {
             let lr = CTLineGetStringRange(line)
             guard range.location >= lr.location, range.location < lr.location + lr.length else { continue }
             let end = min(range.location + range.length, lr.location + lr.length)
-            var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
-            CTLineGetTypographicBounds(line, &ascent, &descent, &leading)
             let x0 = CTLineGetOffsetForStringIndex(line, range.location, nil)
             let x1 = CTLineGetOffsetForStringIndex(line, end, nil)
-            return Placement(x: origin.x + x0, baseline: origin.y, width: x1 - x0, ascent: ascent, descent: descent)
+            return Placement(x: origin.x + x0, baseline: origin.y, width: x1 - x0)
         }
         return nil
     }
 
     /// One word drawn with its word-art treatment into a 2x bitmap.
+    /// `gradient` allows gradient/prism fills (off for the highlight copy, which is a solid colour).
     private static func wordImage(_ line: CTLine, size: CGSize, origin: CGPoint, fill: CGColor,
                                   gradient: Bool, style: CaptionStyle, fontSize: CGFloat) -> CGImage? {
         let scale: CGFloat = 2
@@ -286,6 +459,27 @@ enum CaptionLayers {
         let art = style.wordArt
         let effect = style.artColor.cgColorValue
         let depth = style.artDepthColor.cgColorValue
+
+        // Bubble: a pill behind the word.
+        if art == .bubble {
+            var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+            let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
+            let pill = CGRect(x: origin.x - fontSize * 0.16, y: origin.y - descent - fontSize * 0.06,
+                              width: width + fontSize * 0.32, height: ascent + descent + fontSize * 0.12)
+            let radius = min(pill.height, pill.width) / 2
+            ctx.addPath(CGPath(roundedRect: pill, cornerWidth: radius, cornerHeight: radius, transform: nil))
+            ctx.setFillColor(effect)
+            ctx.fillPath()
+        }
+
+        // Glitch: offset red and cyan copies behind the word.
+        if art == .glitch {
+            let shift = fontSize * 0.04
+            ctx.setFillColor(CGColor(srgbRed: 1, green: 0.1, blue: 0.35, alpha: 0.9))
+            draw(at: CGPoint(x: origin.x - shift, y: origin.y + shift * 0.4), .fill)
+            ctx.setFillColor(CGColor(srgbRed: 0.1, green: 0.9, blue: 1, alpha: 0.9))
+            draw(at: CGPoint(x: origin.x + shift, y: origin.y - shift * 0.4), .fill)
+        }
 
         // 3D: stacked copies stepping down-right.
         if art == .extrude || art == .comic {
@@ -310,7 +504,12 @@ enum CaptionLayers {
             ctx.setShadow(offset: .zero, blur: fontSize * 0.6, color: effect)
             draw(at: origin, .fill)
             ctx.setShadow(offset: .zero, blur: fontSize * 0.25, color: effect)
-        } else if style.showShadow && art != .extrude && art != .comic {
+        } else if art == .glow {
+            ctx.setFillColor(fill)
+            ctx.setShadow(offset: .zero, blur: fontSize * 0.9, color: fill)
+            draw(at: origin, .fill)
+            ctx.setShadow(offset: .zero, blur: fontSize * 0.4, color: fill)
+        } else if style.showShadow && art != .extrude && art != .comic && art != .bubble {
             ctx.setShadow(offset: CGSize(width: 0, height: -fontSize * 0.04), blur: fontSize * 0.16,
                           color: CGColor(gray: 0, alpha: 0.85))
         }
@@ -318,13 +517,25 @@ enum CaptionLayers {
         draw(at: origin, .fill)
         ctx.restoreGState()
 
-        if gradient {
-            // Paint text colour → effect colour, top to bottom, clipped to the glyphs.
+        if gradient && (art == .gradient || art == .prism) {
+            // Gradient: text colour → effect colour, top to bottom. Prism: a rainbow across the word.
             ctx.saveGState()
             draw(at: origin, .clip)
-            if let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                  colors: [fill, effect] as CFArray, locations: [0, 1]) {
+            let space = CGColorSpace(name: CGColorSpace.sRGB)!
+            if art == .gradient,
+               let g = CGGradient(colorsSpace: space, colors: [fill, effect] as CFArray, locations: [0, 1]) {
                 ctx.drawLinearGradient(g, start: CGPoint(x: 0, y: size.height), end: CGPoint(x: 0, y: 0), options: [])
+            } else if art == .prism {
+                let rainbow = [CGColor(srgbRed: 1, green: 0.25, blue: 0.3, alpha: 1),
+                               CGColor(srgbRed: 1, green: 0.65, blue: 0.1, alpha: 1),
+                               CGColor(srgbRed: 1, green: 0.95, blue: 0.2, alpha: 1),
+                               CGColor(srgbRed: 0.3, green: 0.95, blue: 0.4, alpha: 1),
+                               CGColor(srgbRed: 0.2, green: 0.75, blue: 1, alpha: 1),
+                               CGColor(srgbRed: 0.65, green: 0.4, blue: 1, alpha: 1)]
+                if let g = CGGradient(colorsSpace: space, colors: rainbow as CFArray, locations: nil) {
+                    ctx.drawLinearGradient(g, start: CGPoint(x: origin.x, y: 0),
+                                           end: CGPoint(x: size.width - origin.x, y: 0), options: [])
+                }
             }
             ctx.restoreGState()
         }
