@@ -446,10 +446,25 @@ struct EditPanel: View {
 
 struct LanguagePanel: View {
     @EnvironmentObject var state: AppState
-    @State private var script: TextTools.Script = .devanagari
+    @State private var script: TextTools.Script = .latin
 
     var body: some View {
         Form {
+            Section {
+                Text("Choose **Hinglish — Roman script** in the language menu under the video. Hindi is recognised, then written in English letters the way people type it: \"aaj ka video basically kya hai\".")
+                    .foregroundStyle(.secondary)
+                if HinglishPolisher.isAvailable {
+                    Toggle("Polish spelling with Apple Intelligence", isOn: $state.polishHinglishWithAI)
+                }
+            } header: {
+                Text("Hinglish")
+            } footer: {
+                Text(HinglishPolisher.isAvailable
+                     ? "The on-device model tidies spellings (\"nahin\" → \"nahi\") without changing word timings."
+                     : "Spelling polish with Apple Intelligence is available on macOS 26 with Apple Intelligence on.")
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 Picker("Script", selection: $script) {
                     ForEach(TextTools.Script.allCases) { Text($0.rawValue).tag($0) }
@@ -459,7 +474,7 @@ struct LanguagePanel: View {
             } header: {
                 Text("Script")
             } footer: {
-                Text("Same words, different alphabet — e.g. Roman Hinglish ↔ हिन्दी. Timings are kept.")
+                Text("Same words, different alphabet — e.g. हिन्दी → Roman Hinglish, or back. Timings are kept.")
                     .foregroundStyle(.secondary)
             }
 
@@ -490,7 +505,7 @@ struct LanguagePanel: View {
             }
 
             Section {
-                Text("Pick the spoken language under the video before generating captions. English (India) handles Hinglish best.")
+                Text("Pick the spoken language under the video before generating captions. For Hindi/English mixed speech use Hinglish — Roman script; for mostly-English speech, English (India).")
                     .foregroundStyle(.secondary)
             } header: {
                 Text("Transcription")

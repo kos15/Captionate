@@ -19,7 +19,7 @@ The sidebar is grouped by task:
 | **Edit & Audio** | Remove silences and filler words (captions re-timed), auto zoom punch-ins, voice clean-up (hum & background noise), loudness levelling, background music |
 | **Language** | Transliterate between Roman, Devanagari and 11 more scripts (Hinglish ↔ हिन्दी), translate captions into 20 languages (on-device, macOS 15+), restore the original |
 
-Also: on-device transcription with Apple's Speech framework (English-India, Hindi and 50+ languages), live preview that matches the export exactly, hardware-encoded MP4, SRT / WebVTT import and export.
+Also: on-device transcription with Apple's Speech framework (English-India, Hindi and 50+ languages), including **Hinglish — Roman script**: Hindi speech written in English letters the way people type it ("aaj ka video basically kya hai"), optionally polished by Apple Intelligence, live preview that matches the export exactly, hardware-encoded MP4, SRT / WebVTT import and export.
 
 Not included: cloud generative-AI features (AI avatars, eye-contact correction, generated B-roll or music, prompt-based editing) — they need server-side models, and Captionate never uploads your video. The AI hook generator uses Apple's on-device foundation model instead (Apple Intelligence on macOS 26 Tahoe, Apple silicon).
 
@@ -98,6 +98,8 @@ Sources/Captionate/
   EditPlan.swift        silence / filler-word cuts and caption re-timing
   AudioCleaner.swift    voice clean-up and loudness levelling
   TextTools.swift       keywords, emoji, censoring, script conversion
+  HinglishRomanizer.swift  Devanagari → natural Hinglish spelling (rules + word list)
+  HinglishPolisher.swift   optional Apple Intelligence spelling polish
   Translation.swift     on-device caption translation (macOS 15+)
   HookGenerator.swift   AI hook ideas from Apple's on-device model (macOS 26+)
   Models.swift          Word, CaptionSegment, CaptionStyle, EditOptions
@@ -107,5 +109,5 @@ build.sh                builds .app + .dmg
 
 ## Notes
 - Audio is transcribed in 50-second chunks; a word right at a chunk boundary can occasionally be split.
-- Hinglish works best with **English (India)**; pure Hindi with **Hindi (India)**.
+- **Hinglish — Roman script** (the default) recognises Hindi and writes it in English letters; English loanwords come back in English spelling. For mostly-English speech use **English (India)**; for Devanagari captions use **Hindi (India)**.
 - Editing a caption's text keeps word timings if the word count is unchanged; otherwise highlight timing is spread evenly across the caption.

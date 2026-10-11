@@ -28,13 +28,22 @@ enum TranscriberError: LocalizedError {
 final class Transcriber {
     static let chunkSeconds: Double = 50
 
+    /// Pseudo-language: recognise Hindi, write it in Roman (English) letters, Hinglish style.
+    static let hinglishRoman = Locale(identifier: "hi-Latn-IN")
+    static let hindi = Locale(identifier: "hi-IN")
+
+    static func isHinglishRoman(_ l: Locale) -> Bool { l.identifier == hinglishRoman.identifier }
+
     static func supportedLocales() -> [Locale] {
-        SFSpeechRecognizer.supportedLocales()
-            .sorted { displayName($0) < displayName($1) }
+        let all = SFSpeechRecognizer.supportedLocales()
+        let sorted = all.sorted { displayName($0) < displayName($1) }
+        let hasHindi = all.contains { $0.identifier == "hi-IN" || $0.identifier == "hi_IN" }
+        return hasHindi ? [hinglishRoman] + sorted : sorted
     }
 
     static func displayName(_ l: Locale) -> String {
-        Locale.current.localizedString(forIdentifier: l.identifier) ?? l.identifier
+        if isHinglishRoman(l) { return "Hinglish — Roman script (aaj, kya, video)" }
+        return Locale.current.localizedString(forIdentifier: l.identifier) ?? l.identifier
     }
 
     static func requestAuthorization() async -> Bool {
@@ -50,8 +59,10 @@ final class Transcriber {
                            locale: Locale,
                            progress: @escaping (Double, String) -> Void) async throws -> [Word] {
         guard await requestAuthorization() else { throw TranscriberError.notAuthorized }
-        guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
-            throw TranscriberError.recognizerUnavailable(locale.identifier)
+        let romanize = isHinglishRoman(locale)
+        let speechLocale = romanize ? hindi : locale
+        guard let recognizer = SFSpeechRecognizer(locale: speechLocale), recognizer.isAvailable else {
+            throw TranscriberError.recognizerUnavailable(speechLocale.identifier)
         }
 
         let asset = AVURLAsset(url: videoURL)
@@ -81,6 +92,9 @@ final class Transcriber {
             words += chunkWords.map { Word(text: $0.text, start: $0.start + start, end: $0.end + start) }
         }
         progress(1, "Done")
+        if romanize {
+            words = words.map { Word(text: HinglishRomanizer.romanize(word: $0.text), start: $0.start, end: $0.end) }
+        }
         return words
     }
 

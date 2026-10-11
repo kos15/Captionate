@@ -24,6 +24,7 @@ final class AppState: ObservableObject {
     @Published var translationRequest: TranslationRequest?
     @Published var translationTarget = "en"
     @Published var isTranslating = false
+    @Published var polishHinglishWithAI = true
 
     // AI hook generator
     @Published var hookTone: HookTone = .curiosity
@@ -45,7 +46,7 @@ final class AppState: ObservableObject {
 
     init() {
         locales = Transcriber.supportedLocales()
-        let preferred = ["en-IN", "en_IN", "en-US", "en_US"]
+        let preferred = [Transcriber.hinglishRoman.identifier, "en-IN", "en_IN", "en-US", "en_US"]
         locale = preferred.lazy.compactMap { id in
             Transcriber.supportedLocales().first { $0.identifier == id }
         }.first ?? Locale(identifier: "en-US")
@@ -112,11 +113,15 @@ final class AppState: ObservableObject {
         start("Preparing audio…")
         workTask = Task {
             do {
-                let words = try await Transcriber.transcribe(videoURL: url, locale: locale) { p, msg in
+                var words = try await Transcriber.transcribe(videoURL: url, locale: locale) { p, msg in
                     Task { @MainActor in
                         self.progress = p
                         self.statusMessage = msg
                     }
+                }
+                if Transcriber.isHinglishRoman(locale) && polishHinglishWithAI && HinglishPolisher.isAvailable {
+                    statusMessage = "Polishing Hinglish spelling with Apple Intelligence…"
+                    words = await HinglishPolisher.polish(words)
                 }
                 self.words = words
                 regroup()
@@ -212,7 +217,12 @@ final class AppState: ObservableObject {
         backupText()
         for i in segments.indices {
             segments[i].text = TextTools.convert(segments[i].text, to: script)
+            for w in segments[i].words.indices {
+                segments[i].words[w].text = TextTools.convert(segments[i].words[w].text, to: script)
+            }
         }
+        // Keep the transcript in step so "Re-split captions" doesn't bring the old script back.
+        for i in words.indices { words[i].text = TextTools.convert(words[i].text, to: script) }
     }
 
     func requestTranslation() {
