@@ -15,13 +15,13 @@ The sidebar is grouped by task:
 | **Styles** | 37 ready-made looks — Hormozi, MrBeast, Word Pop, Big & Small, Editorial, Karaoke, Highlighted, Neon, Deep Glow, Glitch, Prism, Fire, Comic, Retro 3D, Bubble, Y2K, Cinematic, Podcast, News… |
 | **Text** | Any installed font, size, colour, shadow, UPPERCASE, caption box, **Big & small** (one big word per caption in its own font, the rest small), keyword emphasis, auto emoji, swear-word censoring |
 | **Effects** | Animations (fade, pop, slide up, typewriter, word by word, pop each word, bounce), word art (outline, gradient, neon, deep glow, glitch, prism, bubble, 3D, comic), spoken-word colour and word box |
-| **Layout** | Position, margin, width, **9:16 / 16:9 / 1:1 / 4:5** output (crop or fit), 720p–**4K**, hook title banner, caption length |
+| **Layout** | Position, margin, width, **9:16 / 16:9 / 1:1 / 4:5** output (crop or fit), 720p–**4K**, hook title banner with an **AI hook generator** (Apple Intelligence, on-device, macOS 26+), caption length |
 | **Edit & Audio** | Remove silences and filler words (captions re-timed), auto zoom punch-ins, voice clean-up (hum & background noise), loudness levelling, background music |
 | **Language** | Transliterate between Roman, Devanagari and 11 more scripts (Hinglish ↔ हिन्दी), translate captions into 20 languages (on-device, macOS 15+), restore the original |
 
 Also: on-device transcription with Apple's Speech framework (English-India, Hindi and 50+ languages), live preview that matches the export exactly, hardware-encoded MP4, SRT / WebVTT import and export.
 
-Not included: cloud generative-AI features (AI avatars, eye-contact correction, generated B-roll or music, prompt-based editing) — they need server-side models, and Captionate never uploads your video.
+Not included: cloud generative-AI features (AI avatars, eye-contact correction, generated B-roll or music, prompt-based editing) — they need server-side models, and Captionate never uploads your video. The AI hook generator uses Apple's on-device foundation model instead (Apple Intelligence on macOS 26 Tahoe, Apple silicon).
 
 ## Install (build the DMG)
 Requires macOS 14+ and the Xcode Command Line Tools (`xcode-select --install`).
@@ -99,6 +99,7 @@ Sources/Captionate/
   AudioCleaner.swift    voice clean-up and loudness levelling
   TextTools.swift       keywords, emoji, censoring, script conversion
   Translation.swift     on-device caption translation (macOS 15+)
+  HookGenerator.swift   AI hook ideas from Apple's on-device model (macOS 26+)
   Models.swift          Word, CaptionSegment, CaptionStyle, EditOptions
 Resources/              Info.plist, AppIcon.icns, dmg/ (DMG backgrounds)
 build.sh                builds .app + .dmg
