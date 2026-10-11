@@ -93,7 +93,7 @@ enum TextTools {
     // MARK: Scripts
 
     enum Script: String, CaseIterable, Identifiable {
-        case latin = "Roman (Latin)"
+        case latin = "Roman — Hinglish style (aaj, kya)"
         case devanagari = "Devanagari — हिन्दी, मराठी"
         case bengali = "Bengali — বাংলা"
         case gurmukhi = "Gurmukhi — ਪੰਜਾਬੀ"
@@ -130,6 +130,10 @@ enum TextTools {
 
     /// Transliterates text into another script (e.g. Hinglish ↔ Devanagari). Same words, same timings.
     static func convert(_ text: String, to script: Script) -> String {
+        // Hindi → the way people type Hinglish, not textbook transliteration.
+        if script == .latin && HinglishRomanizer.containsDevanagari(text) {
+            return HinglishRomanizer.romanize(text: text)
+        }
         let latin = text.applyingTransform(.toLatin, reverse: false) ?? text
         if script == .latin {
             return latin.applyingTransform(.stripDiacritics, reverse: false) ?? latin
