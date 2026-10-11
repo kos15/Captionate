@@ -41,6 +41,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Build with the newest installed Xcode so the macOS 26 SDK (Apple Intelligence / FoundationModels)
+      # is available; older SDKs still build, just without the AI hook generator.
+      - name: Select newest Xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)"
+          if [[ -n "$XCODE" ]]; then
+            echo "DEVELOPER_DIR=$XCODE/Contents/Developer" >> "$GITHUB_ENV"
+            echo "Using $XCODE"
+          fi
+
       - name: Import Developer ID certificate
         if: env.MACOS_CERTIFICATE != ''
         run: |

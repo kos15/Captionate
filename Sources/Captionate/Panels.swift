@@ -289,6 +289,8 @@ struct LayoutPanel: View {
                     .foregroundStyle(.secondary)
             }
 
+            HookGeneratorSection()
+
             Section {
                 TextField("Hook title (optional)", text: $state.style.hookText, axis: .vertical)
                     .lineLimit(1...3)
@@ -323,6 +325,64 @@ struct LayoutPanel: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Apple Intelligence writes hook options from the transcript; one click puts one on screen.
+private struct HookGeneratorSection: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        Section {
+            switch HookGenerator.status {
+            case .available:
+                Picker("Style", selection: $state.hookTone) {
+                    ForEach(HookTone.allCases) { Text($0.rawValue).tag($0) }
+                }
+                HStack {
+                    Button {
+                        state.generateHook()
+                    } label: {
+                        Label(state.hookBrief == nil ? "Write hooks" : "Write new hooks", systemImage: "sparkles")
+                    }
+                    .disabled(state.segments.isEmpty || state.isGeneratingHook)
+                    if state.isGeneratingHook { ProgressView().controlSize(.small) }
+                }
+                if state.segments.isEmpty {
+                    Text("Generate captions first; hooks are written from the transcript.")
+                        .foregroundStyle(.secondary)
+                }
+                if let brief = state.hookBrief {
+                    ForEach(brief.hooks, id: \.self) { hook in
+                        HStack {
+                            Text(hook)
+                            Spacer()
+                            Button("Use") { state.style.hookText = hook }
+                                .disabled(state.style.hookText == hook)
+                        }
+                    }
+                    if !brief.opening.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Say this first").font(.caption).foregroundStyle(.secondary)
+                            Text(brief.opening).textSelection(.enabled)
+                        }
+                    }
+                    if !brief.tips.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Brief for the first 3 seconds").font(.caption).foregroundStyle(.secondary)
+                            ForEach(brief.tips, id: \.self) { Text("• " + $0) }
+                        }
+                    }
+                }
+            case .unavailable(let reason):
+                Text(reason).foregroundStyle(.secondary)
+            }
+        } header: {
+            Label("AI hook generator", systemImage: "sparkles")
+        } footer: {
+            Text("Runs on Apple's on-device model — your transcript never leaves this Mac.")
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

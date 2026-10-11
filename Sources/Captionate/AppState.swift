@@ -24,6 +24,11 @@ final class AppState: ObservableObject {
     @Published var translationRequest: TranslationRequest?
     @Published var translationTarget = "en"
     @Published var isTranslating = false
+
+    // AI hook generator
+    @Published var hookTone: HookTone = .curiosity
+    @Published var hookBrief: HookBrief?
+    @Published var isGeneratingHook = false
     @Published private(set) var hasTextBackup = false
     private var textBackup: [CaptionSegment]?
     @Published var locale: Locale
@@ -222,6 +227,22 @@ final class AppState: ObservableObject {
             segments[i].text = text
             segments[i].words = []          // word count changed: highlight timing is spread evenly
             segments[i].overrides = [:]
+        }
+    }
+
+    // MARK: - AI hook
+
+    func generateHook() {
+        guard !segments.isEmpty, !isGeneratingHook else { return }
+        let segments = self.segments, tone = hookTone
+        isGeneratingHook = true
+        Task {
+            do {
+                hookBrief = try await HookGenerator.generate(segments: segments, tone: tone)
+            } catch {
+                errorMessage = "Couldn't write hooks: \(error.localizedDescription)"
+            }
+            isGeneratingHook = false
         }
     }
 
