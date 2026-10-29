@@ -15,6 +15,8 @@ struct ContentView: View {
                 } else {
                     PlayerPreview()
                         .background(Color.black)
+                    QuickSetupBar()
+                    Divider()
                     TranscribeBar()
                 }
             }
@@ -29,7 +31,8 @@ struct ContentView: View {
                 case .text: TextPanel()
                 case .effects: EffectsPanel()
                 case .layout: LayoutPanel()
-                case .edit: EditPanel()
+                case .video: VideoPanel()
+                case .audio: AudioPanel()
                 case .language: LanguagePanel()
                 }
             }
@@ -122,6 +125,13 @@ struct PlayerPreview: View {
                     .frame(width: rect.width, height: rect.height)
                     .offset(x: rect.minX, y: rect.minY)
                     .allowsHitTesting(false)
+                if state.showSafeZones {
+                    SafeZoneOverlay(template: PlatformTemplate.all.first { $0.name == state.activeTemplate }
+                                        ?? PlatformTemplate.all[0])
+                        .frame(width: rect.width, height: rect.height)
+                        .offset(x: rect.minX, y: rect.minY)
+                        .allowsHitTesting(false)
+                }
             }
         }
     }
@@ -237,6 +247,98 @@ struct TranscribeBar: View {
         }
         .padding(12)
         .background(.bar)
+    }
+}
+
+// MARK: - Quick setup
+
+/// One click to set up for a platform, or to bring back your own default preset.
+struct QuickSetupBar: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("Quick setup")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) { chips }
+            }
+            Spacer(minLength: 4)
+            Toggle(isOn: $state.showSafeZones) {
+                Label("Safe zones", systemImage: "rectangle.dashed")
+                    .font(.caption)
+            }
+            .toggleStyle(.button)
+            .controlSize(.small)
+            .help("Show where the platform's buttons and text cover the video")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    @ViewBuilder private var chips: some View {
+        ForEach(PlatformTemplate.all) { t in
+            let active = state.activeTemplate == t.name
+            Button {
+                state.applyTemplate(t)
+            } label: {
+                Label(t.name, systemImage: t.icon)
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(active ? Color.accentColor.opacity(0.2) : Color.secondary.opacity(0.12),
+                                in: Capsule())
+                    .foregroundStyle(active ? Color.accentColor : Color.primary)
+            }
+            .buttonStyle(.plain)
+            .help(t.note + " — sets format, caption placement and length; keeps your look.")
+        }
+        if let preset = state.defaultPreset {
+            Divider().frame(height: 16)
+            Button {
+                state.applyUserPreset(preset)
+            } label: {
+                Label(preset.name, systemImage: "star.fill")
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.yellow.opacity(0.18), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("Apply your default preset")
+        }
+    }
+}
+
+/// Shades the parts of the frame a platform covers with its own buttons and text.
+struct SafeZoneOverlay: View {
+    let template: PlatformTemplate
+
+    var body: some View {
+        GeometryReader { geo in
+            let h = geo.size.height, w = geo.size.width
+            ZStack(alignment: .topLeading) {
+                zone.frame(width: w, height: h * template.topUI)
+                zone.frame(width: w, height: h * template.bottomUI)
+                    .offset(y: h * (1 - template.bottomUI))
+                zone.frame(width: w * template.rightUI * 0.6, height: h * (1 - template.topUI - template.bottomUI))
+                    .offset(x: w * (1 - template.rightUI * 0.6), y: h * template.topUI)
+                Text("\(template.name) safe zone")
+                    .font(.caption2.weight(.semibold))
+                    .padding(4)
+                    .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 4))
+                    .foregroundStyle(.white)
+                    .offset(x: 6, y: h * template.topUI + 6)
+            }
+        }
+    }
+
+    private var zone: some View {
+        Rectangle()
+            .fill(Color.red.opacity(0.18))
+            .overlay(Rectangle().strokeBorder(Color.red.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
     }
 }
 
@@ -395,15 +497,18 @@ struct CaptionRow: View {
 }
 
 struct LabeledSlider: View {
+    enum Format { case percent, signed }
+
     let label: String
     @Binding var value: Double
     let range: ClosedRange<Double>
+    var format: Format = .percent
 
     var body: some View {
         HStack {
             Text(label)
             Slider(value: $value, in: range)
-            Text(String(format: "%.0f%%", value * 100))
+            Text(format == .percent ? String(format: "%.0f%%", value * 100) : String(format: "%+.0f", value * 100))
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .frame(width: 40, alignment: .trailing)

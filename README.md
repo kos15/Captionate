@@ -12,14 +12,17 @@ The sidebar is grouped by task:
 | Panel | What's in it |
 |---|---|
 | **Captions** | Editable caption list, click to seek, find & replace, merge/split captions, **word editor** (fix a word, retime it, recolour it, emphasise it) |
-| **Styles** | 37 ready-made looks — Hormozi, MrBeast, Word Pop, Big & Small, Editorial, Karaoke, Highlighted, Neon, Deep Glow, Glitch, Prism, Fire, Comic, Retro 3D, Bubble, Y2K, Cinematic, Podcast, News… |
+| **Styles** | **My presets** — save the whole setup (look, placement, format, caption length, video and audio) and ★ one as the default that loads every launch — plus 37 ready-made looks — Hormozi, MrBeast, Word Pop, Big & Small, Editorial, Karaoke, Highlighted, Neon, Deep Glow, Glitch, Prism, Fire, Comic, Retro 3D, Bubble, Y2K, Cinematic, Podcast, News… |
 | **Text** | Any installed font, size, colour, shadow, UPPERCASE, caption box, **Big & small** (one big word per caption in its own font, the rest small), keyword emphasis, auto emoji, swear-word censoring |
 | **Effects** | Animations (fade, pop, slide up, typewriter, word by word, pop each word, bounce), word art (outline, gradient, neon, deep glow, glitch, prism, bubble, 3D, comic), spoken-word colour and word box |
 | **Layout** | Position, margin, width, **9:16 / 16:9 / 1:1 / 4:5** output (crop or fit), 720p–**4K**, hook title banner with an **AI hook generator** (Apple Intelligence, on-device, macOS 26+), caption length |
-| **Edit & Audio** | Remove silences and filler words (captions re-timed), auto zoom punch-ins, voice clean-up (hum & background noise), loudness levelling, background music |
+| **Video** | Colour looks (Vivid, Warm, Cool, Cinematic, Vintage, Faded, Chrome, Mono, Noir), brightness, contrast, saturation, warmth, vignette, sharpen — live in the preview — fade in / out, remove silences and filler words (captions re-timed), auto zoom punch-ins |
+| **Audio** | Voice volume, voice tone (Clear voice, Podcast, Warm, Deep, Radio), voice clean-up (hum & background noise), loudness levelling, background music that ducks under speech, fade in / out |
 | **Language** | Transliterate between Roman, Devanagari and 11 more scripts (Hinglish ↔ हिन्दी), translate captions into 20 languages (on-device, macOS 15+), restore the original |
 
-Also: on-device transcription with Apple's Speech framework (English-India, Hindi and 50+ languages), including **Hinglish — Roman script**: Hindi speech written in English letters the way people type it ("aaj ka video basically kya hai"), optionally polished by Apple Intelligence, live preview that matches the export exactly, hardware-encoded MP4, SRT / WebVTT import and export.
+**Quick setup** buttons under the video set the format for **Reels, Shorts, TikTok, YouTube or Square** in one click — 9:16 / 16:9 / 1:1 at 1080p, captions placed clear of the platform's buttons, short- or long-form caption length — without touching your look. *Safe zones* shades the parts of the frame each platform covers.
+
+Also: on-device transcription with Apple's Speech framework (English-India, Hindi and 50+ languages), including **Hinglish — Roman script**: Hindi speech written in English letters the way people type it ("aaj ka video basically kya hai"), optionally polished by Apple Intelligence. On macOS 26 English (and other supported languages) uses Apple's newer long-form speech model (SpeechAnalyzer), falling back to the classic recogniser, which runs on overlapping chunks so no word is lost at a seam. A *Names & special words* list (Language panel) is passed to the recogniser and always spelled exactly as written. Live preview that matches the export exactly, hardware-encoded MP4, SRT / WebVTT import and export.
 
 Not included: cloud generative-AI features (AI avatars, eye-contact correction, generated B-roll or music, prompt-based editing) — they need server-side models, and Captionate never uploads your video. The AI hook generator uses Apple's on-device foundation model instead (Apple Intelligence on macOS 26 Tahoe, Apple silicon).
 

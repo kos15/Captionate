@@ -25,7 +25,20 @@ enum VideoExporter {
                        edit: EditOptions,
                        to outURL: URL,
                        progress: @escaping (Double) -> Void) async throws {
-        let asset = AVURLAsset(url: videoURL)
+        // Colour look: grade a copy first, then caption that copy.
+        var asset = AVURLAsset(url: videoURL)
+        var progressBase = 0.0
+        var gradedURL: URL?
+        defer { if let gradedURL { try? FileManager.default.removeItem(at: gradedURL) } }
+        if !edit.video.isIdentity {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("captionate-graded-\(UUID().uuidString).mov")
+            gradedURL = url
+            try await VideoEffects.render(asset, adjustments: edit.video, to: url) { p in progress(p * 0.4) }
+            asset = AVURLAsset(url: url)
+            progressBase = 0.4
+        }
+
         guard let srcVideo = try await asset.loadTracks(withMediaType: .video).first else {
             throw VideoExportError.noVideoTrack
         }
@@ -45,12 +58,11 @@ enum VideoExporter {
         var cleanedURL: URL?
         defer { if let cleanedURL { try? FileManager.default.removeItem(at: cleanedURL) } }
         let originalAudio = try await asset.loadTracks(withMediaType: .audio)
-        var progressBase = 0.0
-        if edit.cleanAudio || edit.normalizeLoudness, let first = originalAudio.first,
+        if edit.processesVoice, let first = originalAudio.first,
            let url = try await AudioCleaner.process(videoURL, denoise: edit.cleanAudio,
-                                                    normalize: edit.normalizeLoudness) {
+                                                    normalize: edit.normalizeLoudness, eq: edit.voiceEQ) {
             cleanedURL = url
-            progressBase = 0.15
+            progressBase += (1 - progressBase) * 0.15
             progress(progressBase)
             let cleaned = AVURLAsset(url: url)
             if let track = try await cleaned.loadTracks(withMediaType: .audio).first {
@@ -90,9 +102,21 @@ enum VideoExporter {
             cursor = cursor + piece.duration
         }
         let total = comp.duration
+        let totalSeconds = total.seconds
 
-        // Background music, looped to length, with a fade-out.
+        // Voice: volume and fades.
         var mixParameters: [AVMutableAudioMixInputParameters] = []
+        let voiceEnvelope = VolumeEnvelope(total: totalSeconds, level: edit.voiceVolume,
+                                           fadeIn: edit.fadeIn, fadeOut: edit.fadeOut)
+        if !voiceEnvelope.isFlat {
+            for case let track? in compAudio {
+                let params = AVMutableAudioMixInputParameters(track: track)
+                voiceEnvelope.apply(to: params)
+                mixParameters.append(params)
+            }
+        }
+
+        // Background music, looped to length, ducked under speech, with fades.
         if let musicURL = edit.musicURL {
             let music = AVURLAsset(url: musicURL)
             if let track = try await music.loadTracks(withMediaType: .audio).first,
@@ -105,11 +129,10 @@ enum VideoExporter {
                     at = at + length
                 }
                 let params = AVMutableAudioMixInputParameters(track: dst)
-                let volume = Float(edit.musicVolume)
-                params.setVolume(volume, at: .zero)
-                let fade = CMTime(seconds: min(2, total.seconds / 4), preferredTimescale: 600)
-                params.setVolumeRamp(fromStartVolume: volume, toEndVolume: 0,
-                                     timeRange: CMTimeRange(start: total - fade, duration: fade))
+                var envelope = VolumeEnvelope(total: totalSeconds, level: edit.musicVolume, fadeIn: edit.fadeIn,
+                                              fadeOut: max(edit.fadeOut, min(2, totalSeconds / 4)))
+                if edit.duckMusic { envelope.duck(under: captions.map { ($0.start, $0.end) }) }
+                envelope.apply(to: params)
                 mixParameters.append(params)
             }
         }
@@ -138,6 +161,7 @@ enum VideoExporter {
         let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideo)
         layerInstruction.setTransform(base, at: .zero)
         if edit.autoZoom { addZooms(to: layerInstruction, base: base, canvas: renderSize, captions: captions) }
+        addFades(to: layerInstruction, total: totalSeconds, fadeIn: edit.fadeIn, fadeOut: edit.fadeOut)
         instruction.layerInstructions = [layerInstruction]
         videoComposition.instructions = [instruction]
 
@@ -216,6 +240,21 @@ enum VideoExporter {
             layer.setTransformRamp(fromStart: base, toEnd: zoom, timeRange: CMTimeRange(start: time(a), end: time(a + 0.25)))
             layer.setTransformRamp(fromStart: zoom, toEnd: base, timeRange: CMTimeRange(start: time(b - 0.25), end: time(b)))
             last = b
+        }
+    }
+
+    /// Fade from / to the background colour at the start and end.
+    private static func addFades(to layer: AVMutableVideoCompositionLayerInstruction, total: Double,
+                                 fadeIn: Double, fadeOut: Double) {
+        func time(_ s: Double) -> CMTime { CMTime(seconds: s, preferredTimescale: 600) }
+        let fadeIn = min(fadeIn, total / 2), fadeOut = min(fadeOut, total / 2)
+        if fadeIn > 0 {
+            layer.setOpacityRamp(fromStartOpacity: 0, toEndOpacity: 1,
+                                 timeRange: CMTimeRange(start: .zero, end: time(fadeIn)))
+        }
+        if fadeOut > 0 {
+            layer.setOpacityRamp(fromStartOpacity: 1, toEndOpacity: 0,
+                                 timeRange: CMTimeRange(start: time(total - fadeOut), end: time(total)))
         }
     }
 
@@ -624,6 +663,76 @@ enum CaptionLayers {
             group.add(a, forKey: "bounce")
         default:
             break
+        }
+    }
+}
+
+/// A track's volume over time — level × fades × ducking — written to an audio mix as back-to-back ramps
+/// (AVAudioMix ramps must not overlap, so everything is folded into one curve first).
+struct VolumeEnvelope {
+    let total: Double
+    let level: Double
+    let fadeIn: Double
+    let fadeOut: Double
+    private var speech: [(start: Double, end: Double)] = []
+    private let duckLevel = 0.35
+    private let duckAttack = 0.3, duckRelease = 0.5
+
+    init(total: Double, level: Double, fadeIn: Double, fadeOut: Double) {
+        self.total = max(0, total)
+        self.level = level
+        self.fadeIn = min(max(0, fadeIn), self.total / 2)
+        self.fadeOut = min(max(0, fadeOut), self.total / 2)
+    }
+
+    var isFlat: Bool { level == 1 && fadeIn == 0 && fadeOut == 0 && speech.isEmpty }
+
+    /// Lowers the volume while captions are on screen; short gaps between captions stay ducked.
+    mutating func duck(under spans: [(Double, Double)]) {
+        var merged: [(start: Double, end: Double)] = []
+        for (a, b) in spans.sorted(by: { $0.0 < $1.0 }) where b > a {
+            if let last = merged.last, a - last.end < 0.8 {
+                merged[merged.count - 1].end = max(last.end, b)
+            } else {
+                merged.append((a, b))
+            }
+        }
+        speech = merged
+    }
+
+    func gain(at t: Double) -> Double {
+        var g = level
+        if fadeIn > 0, t < fadeIn { g *= max(0, t / fadeIn) }
+        if fadeOut > 0, t > total - fadeOut { g *= max(0, (total - t) / fadeOut) }
+        var duck = 1.0
+        for s in speech {
+            let d: Double
+            if t >= s.start && t <= s.end { d = duckLevel }
+            else if t < s.start && t > s.start - duckAttack { d = 1 - (1 - duckLevel) * (t - (s.start - duckAttack)) / duckAttack }
+            else if t > s.end && t < s.end + duckRelease { d = duckLevel + (1 - duckLevel) * (t - s.end) / duckRelease }
+            else { continue }
+            duck = min(duck, d)
+        }
+        return g * duck
+    }
+
+    func apply(to params: AVMutableAudioMixInputParameters) {
+        var points: Set<Double> = [0, total, fadeIn, total - fadeOut]
+        for s in speech {
+            points.formUnion([s.start - duckAttack, s.start, s.end, s.end + duckRelease])
+        }
+        var times: [Double] = []
+        for t in points.map({ min(max($0, 0), total) }).sorted() where times.last.map({ t - $0 > 0.01 }) ?? true {
+            times.append(t)
+        }
+        func time(_ s: Double) -> CMTime { CMTime(seconds: s, preferredTimescale: 600) }
+        guard times.count > 1 else {
+            params.setVolume(Float(gain(at: 0)), at: .zero)
+            return
+        }
+        for (a, b) in zip(times, times.dropFirst()) {
+            params.setVolumeRamp(fromStartVolume: Float(gain(at: a)), toEndVolume: Float(gain(at: b)),
+                                 timeRange: CMTimeRange(start: time(a), end: time(b)))
         }
     }
 }

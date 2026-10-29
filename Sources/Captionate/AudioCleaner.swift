@@ -8,7 +8,8 @@ enum AudioCleaner {
     static let sampleRate = 48_000.0
 
     /// Returns nil when the file has no audio.
-    static func process(_ url: URL, denoise: Bool, normalize doNormalize: Bool) async throws -> URL? {
+    static func process(_ url: URL, denoise: Bool, normalize doNormalize: Bool,
+                        eq: VoiceEQ = .none) async throws -> URL? {
         let asset = AVURLAsset(url: url)
         guard let track = try await asset.loadTracks(withMediaType: .audio).first else { return nil }
         var (left, right) = try decode(asset: asset, track: track)
@@ -25,7 +26,14 @@ enum AudioCleaner {
             try Task.checkCancellation()
             gate(&left, &right)
         }
-        if doNormalize { normalize(&left, &right) }
+        let eqFilters = filters(for: eq)
+        for proto in eqFilters {
+            var l = proto, r = proto
+            l.process(&left)
+            r.process(&right)
+        }
+        try Task.checkCancellation()
+        if doNormalize { normalize(&left, &right) } else if !eqFilters.isEmpty { limitPeaks(&left, &right) }
         try Task.checkCancellation()
         return try write(left, right)
     }
@@ -92,6 +100,30 @@ enum AudioCleaner {
 
     // MARK: DSP
 
+    private static func filters(for eq: VoiceEQ) -> [Biquad] {
+        switch eq {
+        case .none: return []
+        case .clear: return [.highPass(90), .peaking(3200, gainDB: 4, q: 1), .highShelf(9000, gainDB: 2)]
+        case .podcast: return [.highPass(80), .lowShelf(160, gainDB: 2.5), .peaking(400, gainDB: -2, q: 1.2),
+                               .peaking(2800, gainDB: 3, q: 0.9)]
+        case .warm: return [.lowShelf(200, gainDB: 4), .highShelf(7000, gainDB: -2.5)]
+        case .deep: return [.highPass(55), .lowShelf(130, gainDB: 6), .peaking(2500, gainDB: 1.5, q: 1)]
+        case .radio: return [.highPass(400), .highPass(400), .lowPass(3400), .lowPass(3400), .peaking(1500, gainDB: 4, q: 0.8)]
+        }
+    }
+
+    /// Keeps EQ boosts from clipping (peak ≤ -1 dBFS) when loudness levelling is off.
+    private static func limitPeaks(_ left: inout [Float], _ right: inout [Float]) {
+        var peak: Float = 0
+        for i in left.indices { peak = max(peak, abs(left[i]), abs(right[i])) }
+        guard peak > 0.89 else { return }
+        let gain = 0.89 / peak
+        for i in left.indices {
+            left[i] *= gain
+            right[i] *= gain
+        }
+    }
+
     /// RBJ biquad filter.
     private struct Biquad {
         var b0, b1, b2, a1, a2: Float
@@ -107,6 +139,41 @@ enum AudioCleaner {
             let w = 2 * Double.pi * f / sampleRate, alpha = sin(w) / (2 * q), c = cos(w), a0 = 1 + alpha
             return Biquad(b0: Float(1 / a0), b1: Float(-2 * c / a0), b2: Float(1 / a0),
                           a1: Float(-2 * c / a0), a2: Float((1 - alpha) / a0))
+        }
+
+        static func lowPass(_ f: Double, q: Double = 0.707) -> Biquad {
+            let w = 2 * Double.pi * f / sampleRate, alpha = sin(w) / (2 * q), c = cos(w), a0 = 1 + alpha
+            return Biquad(b0: Float((1 - c) / 2 / a0), b1: Float((1 - c) / a0), b2: Float((1 - c) / 2 / a0),
+                          a1: Float(-2 * c / a0), a2: Float((1 - alpha) / a0))
+        }
+
+        static func peaking(_ f: Double, gainDB: Double, q: Double) -> Biquad {
+            let a = pow(10, gainDB / 40), w = 2 * Double.pi * f / sampleRate
+            let alpha = sin(w) / (2 * q), c = cos(w), a0 = 1 + alpha / a
+            return Biquad(b0: Float((1 + alpha * a) / a0), b1: Float(-2 * c / a0), b2: Float((1 - alpha * a) / a0),
+                          a1: Float(-2 * c / a0), a2: Float((1 - alpha / a) / a0))
+        }
+
+        static func lowShelf(_ f: Double, gainDB: Double) -> Biquad {
+            let a = pow(10, gainDB / 40), w = 2 * Double.pi * f / sampleRate, c = cos(w)
+            let k = 2 * a.squareRoot() * sin(w) / 2 * 2.0.squareRoot()     // shelf slope 1
+            let a0 = (a + 1) + (a - 1) * c + k
+            return Biquad(b0: Float(a * ((a + 1) - (a - 1) * c + k) / a0),
+                          b1: Float(2 * a * ((a - 1) - (a + 1) * c) / a0),
+                          b2: Float(a * ((a + 1) - (a - 1) * c - k) / a0),
+                          a1: Float(-2 * ((a - 1) + (a + 1) * c) / a0),
+                          a2: Float(((a + 1) + (a - 1) * c - k) / a0))
+        }
+
+        static func highShelf(_ f: Double, gainDB: Double) -> Biquad {
+            let a = pow(10, gainDB / 40), w = 2 * Double.pi * f / sampleRate, c = cos(w)
+            let k = 2 * a.squareRoot() * sin(w) / 2 * 2.0.squareRoot()
+            let a0 = (a + 1) - (a - 1) * c + k
+            return Biquad(b0: Float(a * ((a + 1) + (a - 1) * c + k) / a0),
+                          b1: Float(-2 * a * ((a - 1) + (a + 1) * c) / a0),
+                          b2: Float(a * ((a + 1) + (a - 1) * c - k) / a0),
+                          a1: Float(2 * ((a - 1) - (a + 1) * c) / a0),
+                          a2: Float(((a + 1) - (a - 1) * c - k) / a0))
         }
 
         mutating func process(_ samples: inout [Float]) {

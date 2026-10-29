@@ -18,7 +18,23 @@ final class AppState: ObservableObject {
     @Published var segments: [CaptionSegment] = []
     @Published var style = CaptionStyle()
     @Published var grouping = GroupingOptions.standard
-    @Published var edit = EditOptions()
+    @Published var edit = EditOptions() {
+        didSet { if edit.video != oldValue.video { updatePreviewLook() } }
+    }
+
+    // Presets & platform templates
+    @Published var userPresets: [UserPreset] = PresetStore.load()
+    @Published var defaultPresetName: String? = PresetStore.defaultName
+    @Published var activeTemplate: String?
+    @Published var showSafeZones = false
+
+    // Transcription settings (remembered between launches)
+    @Published var vocabularyText = UserDefaults.standard.string(forKey: "vocabulary") ?? "" {
+        didSet { UserDefaults.standard.set(vocabularyText, forKey: "vocabulary") }
+    }
+    @Published var useAdvancedSpeech = UserDefaults.standard.object(forKey: "useAdvancedSpeech") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(useAdvancedSpeech, forKey: "useAdvancedSpeech") }
+    }
 
     // Language tools
     @Published var translationRequest: TranslationRequest?
@@ -50,6 +66,20 @@ final class AppState: ObservableObject {
         locale = preferred.lazy.compactMap { id in
             Transcriber.supportedLocales().first { $0.identifier == id }
         }.first ?? Locale(identifier: "en-US")
+        if let saved = UserDefaults.standard.string(forKey: "locale"),
+           let match = locales.first(where: { $0.identifier == saved }) {
+            locale = match
+        }
+        if let name = defaultPresetName, let preset = userPresets.first(where: { $0.name == name }) {
+            applyUserPreset(preset)
+        }
+    }
+
+    /// Names, brands and special words from the Language panel, one per comma or line.
+    var vocabulary: [String] {
+        vocabularyText.split(whereSeparator: { $0 == "," || $0.isNewline })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 
     var activeSegment: CaptionSegment? {
@@ -88,6 +118,7 @@ final class AppState: ObservableObject {
             MainActor.assumeIsolated { self?.currentTime = t.seconds }
         }
         self.player = player
+        updatePreviewLook()
 
         Task {
             let asset = AVURLAsset(url: url)
@@ -109,11 +140,13 @@ final class AppState: ObservableObject {
 
     func transcribe() {
         guard let url = videoURL, !isWorking else { return }
-        let locale = self.locale
+        let locale = self.locale, vocabulary = self.vocabulary, advanced = useAdvancedSpeech
+        UserDefaults.standard.set(locale.identifier, forKey: "locale")
         start("Preparing audio…")
         workTask = Task {
             do {
-                var words = try await Transcriber.transcribe(videoURL: url, locale: locale) { p, msg in
+                var words = try await Transcriber.transcribe(videoURL: url, locale: locale, vocabulary: vocabulary,
+                                                             useAdvancedModel: advanced) { p, msg in
                     Task { @MainActor in
                         self.progress = p
                         self.statusMessage = msg
@@ -301,7 +334,8 @@ final class AppState: ObservableObject {
               let out = savePanel(ext: "mp4") else { return }
         let segments = self.segments, style = self.style, edit = self.edit
         player?.pause()
-        start(edit.cleanAudio || edit.normalizeLoudness ? "Cleaning audio and rendering…" : "Rendering captions into video…")
+        start(!edit.video.isIdentity ? "Applying the video look, then rendering…"
+              : edit.processesVoice ? "Processing audio and rendering…" : "Rendering captions into video…")
         workTask = Task {
             do {
                 try await VideoExporter.export(videoURL: src, segments: segments, style: style, edit: edit,
@@ -346,7 +380,73 @@ final class AppState: ObservableObject {
         s.hookDuration = style.hookDuration
         s.hookColor = style.hookColor
         style = s
-        grouping = preset.shortForm ? .shortForm : .standard
+        setGrouping(preset.shortForm ? .shortForm : .standard)
+    }
+
+    /// Re-splits captions only when the grouping actually changes, so text edits survive a restyle.
+    private func setGrouping(_ g: GroupingOptions) {
+        guard g != grouping else { return }
+        grouping = g
         regroup()
+    }
+
+    func applyTemplate(_ template: PlatformTemplate) {
+        var s = style, e = edit, g = grouping
+        template.apply(style: &s, edit: &e, grouping: &g)
+        style = s
+        edit = e
+        setGrouping(g)
+        activeTemplate = template.name
+    }
+
+    func applyUserPreset(_ preset: UserPreset) {
+        var s = preset.style
+        s.hookText = style.hookText          // the hook is per video
+        var e = preset.edit
+        e.musicURL = edit.musicURL           // so is the music file
+        style = s
+        edit = e
+        setGrouping(preset.grouping)
+        activeTemplate = nil
+    }
+
+    /// Saves the current look, format, caption length, video and audio settings under `name`
+    /// (replacing a preset of the same name).
+    func savePreset(named rawName: String) {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        var s = style
+        s.hookText = ""
+        var e = edit
+        e.musicURL = nil
+        let preset = UserPreset(name: name, style: s, grouping: grouping, edit: e)
+        if let i = userPresets.firstIndex(where: { $0.name == name }) {
+            userPresets[i] = preset
+        } else {
+            userPresets.append(preset)
+        }
+        PresetStore.save(userPresets)
+    }
+
+    func deletePreset(_ preset: UserPreset) {
+        userPresets.removeAll { $0.name == preset.name }
+        if defaultPresetName == preset.name { setDefaultPreset(nil) }
+        PresetStore.save(userPresets)
+    }
+
+    /// The default preset is applied every time Captionate opens.
+    func setDefaultPreset(_ name: String?) {
+        defaultPresetName = name
+        PresetStore.defaultName = name
+    }
+
+    var defaultPreset: UserPreset? { userPresets.first { $0.name == defaultPresetName } }
+
+    // MARK: - Video look preview
+
+    private func updatePreviewLook() {
+        guard let item = player?.currentItem else { return }
+        item.videoComposition = VideoEffects.composition(for: item.asset, adjustments: edit.video)
+        if player?.rate == 0 { seek(to: currentTime) }   // redraw the paused frame
     }
 }
