@@ -40,7 +40,7 @@ struct CaptionSegment: Identifiable, Hashable {
     }
 }
 
-enum CaptionPosition: String, CaseIterable, Identifiable {
+enum CaptionPosition: String, CaseIterable, Identifiable, Codable {
     case bottom = "Bottom"
     case middle = "Middle"
     case top = "Top"
@@ -48,7 +48,7 @@ enum CaptionPosition: String, CaseIterable, Identifiable {
 }
 
 /// How a caption (or its words) comes on screen.
-enum CaptionAnimation: String, CaseIterable, Identifiable {
+enum CaptionAnimation: String, CaseIterable, Identifiable, Codable {
     case none = "None"
     case fade = "Fade in"
     case pop = "Pop"
@@ -61,7 +61,7 @@ enum CaptionAnimation: String, CaseIterable, Identifiable {
 }
 
 /// Decorative text treatments.
-enum WordArt: String, CaseIterable, Identifiable {
+enum WordArt: String, CaseIterable, Identifiable, Codable {
     case none = "None"
     case outline = "Outline"
     case gradient = "Gradient"
@@ -77,7 +77,7 @@ enum WordArt: String, CaseIterable, Identifiable {
 
 /// Visual style shared by the live preview and the burned-in export.
 /// Sizes are relative to the video height so preview == export.
-struct CaptionStyle: Equatable {
+struct CaptionStyle: Equatable, Codable {
     var fontName: String = "Helvetica Neue"
     var bold: Bool = true
     var fontScale: Double = 0.055          // font size as fraction of video height
@@ -128,7 +128,7 @@ struct CaptionStyle: Equatable {
     func displayText(_ s: String) -> String { uppercase ? s.uppercased() : s }
 }
 
-enum CanvasAspect: String, CaseIterable, Identifiable {
+enum CanvasAspect: String, CaseIterable, Identifiable, Codable {
     case original = "Original"
     case vertical = "9:16"
     case landscape = "16:9"
@@ -147,13 +147,13 @@ enum CanvasAspect: String, CaseIterable, Identifiable {
     }
 }
 
-enum CanvasFit: String, CaseIterable, Identifiable {
+enum CanvasFit: String, CaseIterable, Identifiable, Codable {
     case fill = "Fill (crop)"
     case fit = "Fit (bars)"
     var id: String { rawValue }
 }
 
-enum ExportResolution: String, CaseIterable, Identifiable {
+enum ExportResolution: String, CaseIterable, Identifiable, Codable {
     case original = "Original"
     case hd720 = "720p"
     case hd1080 = "1080p"
@@ -171,7 +171,7 @@ enum ExportResolution: String, CaseIterable, Identifiable {
 }
 
 /// Edit, format and audio options applied when the video is exported.
-struct EditOptions: Equatable {
+struct EditOptions: Equatable, Codable {
     var aspect: CanvasAspect = .original
     var fit: CanvasFit = .fill
     var canvasColor: Color = .black
@@ -183,13 +183,59 @@ struct EditOptions: Equatable {
     var normalizeLoudness = false
     var musicURL: URL?
     var musicVolume: Double = 0.2
+    var duckMusic = true                     // lower the music while someone is talking
     var autoZoom = false
+    var video = VideoAdjustments()
+    var fadeIn: Double = 0                   // seconds, picture and sound
+    var fadeOut: Double = 0
+    var voiceVolume: Double = 1              // 0...2
+    var voiceEQ: VoiceEQ = .none
 
     var cutsAnything: Bool { removeSilences || removeFillers }
+    /// The voice track has to be decoded and re-processed on export.
+    var processesVoice: Bool { cleanAudio || normalizeLoudness || voiceEQ != .none }
+}
+
+/// Colour look and picture adjustments (Core Image), shown live in the preview and burned into the export.
+struct VideoAdjustments: Equatable, Codable {
+    var look: VideoLook = .none
+    var brightness: Double = 0               // -0.3...0.3
+    var contrast: Double = 1                 // 0.6...1.6
+    var saturation: Double = 1               // 0...2
+    var warmth: Double = 0                   // -1 (cool) ... 1 (warm)
+    var vignette: Double = 0                 // 0...1
+    var sharpen: Double = 0                  // 0...1
+
+    var isIdentity: Bool { self == VideoAdjustments() }
+}
+
+enum VideoLook: String, CaseIterable, Identifiable, Codable {
+    case none = "None"
+    case vivid = "Vivid"
+    case warm = "Warm"
+    case cool = "Cool"
+    case cinematic = "Cinematic"
+    case vintage = "Vintage"
+    case fade = "Faded"
+    case chrome = "Chrome"
+    case mono = "Mono"
+    case noir = "Noir"
+    var id: String { rawValue }
+}
+
+/// Tone shaping for the voice track.
+enum VoiceEQ: String, CaseIterable, Identifiable, Codable {
+    case none = "Off"
+    case clear = "Clear voice"
+    case podcast = "Podcast"
+    case warm = "Warm"
+    case deep = "Deep"
+    case radio = "Radio / phone"
+    var id: String { rawValue }
 }
 
 /// How words are grouped into captions.
-struct GroupingOptions {
+struct GroupingOptions: Equatable, Codable {
     var maxChars: Int = 42
     var maxWords: Int = 12
     var maxDuration: Double = 5.0
@@ -197,6 +243,29 @@ struct GroupingOptions {
 
     static let standard = GroupingOptions()
     static let shortForm = GroupingOptions(maxChars: 20, maxWords: 3, maxDuration: 2.0, pauseSplit: 0.4)
+}
+
+/// Colours are stored as sRGB components so presets can be saved to disk.
+extension Color: Codable {
+    private enum CodingKeys: String, CodingKey { case r, g, b, a }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(.sRGB,
+                  red: try c.decode(Double.self, forKey: .r),
+                  green: try c.decode(Double.self, forKey: .g),
+                  blue: try c.decode(Double.self, forKey: .b),
+                  opacity: try c.decodeIfPresent(Double.self, forKey: .a) ?? 1)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        let ns = NSColor(self).usingColorSpace(.sRGB) ?? .white
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(Double(ns.redComponent), forKey: .r)
+        try c.encode(Double(ns.greenComponent), forKey: .g)
+        try c.encode(Double(ns.blueComponent), forKey: .b)
+        try c.encode(Double(ns.alphaComponent), forKey: .a)
+    }
 }
 
 extension Color {

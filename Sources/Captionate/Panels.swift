@@ -8,7 +8,8 @@ enum SidebarPanel: String, CaseIterable, Identifiable {
     case text = "Text"
     case effects = "Effects"
     case layout = "Layout"
-    case edit = "Edit & Audio"
+    case video = "Video"
+    case audio = "Audio"
     case language = "Language"
     var id: String { rawValue }
 
@@ -19,12 +20,13 @@ enum SidebarPanel: String, CaseIterable, Identifiable {
         case .text: return "textformat"
         case .effects: return "wand.and.stars"
         case .layout: return "aspectratio"
-        case .edit: return "scissors"
+        case .video: return "camera.filters"
+        case .audio: return "waveform"
         case .language: return "globe"
         }
     }
 
-    var shortTitle: String { self == .edit ? "Edit" : rawValue }
+    var shortTitle: String { self == .language ? "Lang" : rawValue }
 }
 
 struct PanelTabBar: View {
@@ -62,6 +64,8 @@ struct StylesPanel: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                MyPresetsSection()
+                Divider()
                 Text("\(StylePreset.all.count) styles. Pick one, then fine-tune it in Text, Effects and Layout.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -386,24 +390,102 @@ private struct HookGeneratorSection: View {
     }
 }
 
-// MARK: - Edit & audio
+// MARK: - My presets
 
-struct EditPanel: View {
+/// Save everything as a preset, apply it in one click, and star one as the default for every launch.
+private struct MyPresetsSection: View {
+    @EnvironmentObject var state: AppState
+    @State private var name = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("My presets").font(.headline)
+            Text("Saves the caption look, placement, format, caption length, video look and audio settings. The ★ default is applied every time Captionate opens.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                TextField("Preset name, e.g. My Reels", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(save)
+                Button("Save current", action: save)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            ForEach(state.userPresets) { preset in
+                let isDefault = state.defaultPresetName == preset.name
+                HStack(spacing: 8) {
+                    Button {
+                        state.setDefaultPreset(isDefault ? nil : preset.name)
+                    } label: {
+                        Image(systemName: isDefault ? "star.fill" : "star")
+                            .foregroundStyle(isDefault ? Color.yellow : Color.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isDefault ? "Default preset — applied at launch. Click to unset." : "Make this the default")
+                    Text(preset.name).lineLimit(1)
+                    Text("\(preset.edit.aspect.rawValue) · \(preset.style.fontName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer()
+                    Button("Apply") { state.applyUserPreset(preset) }
+                    Button {
+                        state.deletePreset(preset)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Delete preset")
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
+    private func save() {
+        state.savePreset(named: name)
+        name = ""
+    }
+}
+
+// MARK: - Video
+
+struct VideoPanel: View {
     @EnvironmentObject var state: AppState
 
     var body: some View {
         Form {
             Section {
-                Toggle("Remove silences & long pauses", isOn: $state.edit.removeSilences)
-                HStack {
-                    Text("Pause longer than")
-                    Slider(value: $state.edit.silenceThreshold, in: 0.3...2.0, step: 0.1)
-                    Text(String(format: "%.1fs", state.edit.silenceThreshold))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 36, alignment: .trailing)
+                Picker("Look", selection: $state.edit.video.look) {
+                    ForEach(VideoLook.allCases) { Text($0.rawValue).tag($0) }
                 }
-                .disabled(!state.edit.removeSilences)
+                LabeledSlider(label: "Brightness", value: $state.edit.video.brightness, range: -0.3...0.3, format: .signed)
+                LabeledSlider(label: "Contrast", value: $state.edit.video.contrast, range: 0.6...1.6)
+                LabeledSlider(label: "Saturation", value: $state.edit.video.saturation, range: 0...2)
+                LabeledSlider(label: "Warmth", value: $state.edit.video.warmth, range: -1...1, format: .signed)
+                LabeledSlider(label: "Vignette", value: $state.edit.video.vignette, range: 0...1)
+                LabeledSlider(label: "Sharpen", value: $state.edit.video.sharpen, range: 0...1)
+                Button("Reset look") { state.edit.video = VideoAdjustments() }
+                    .disabled(state.edit.video.isIdentity)
+            } header: {
+                Text("Colour & look")
+            } footer: {
+                Text("Shown live in the preview and burned into the export.").foregroundStyle(.secondary)
+            }
+
+            Section {
+                SecondsSlider(label: "Fade in", value: $state.edit.fadeIn, range: 0...3)
+                SecondsSlider(label: "Fade out", value: $state.edit.fadeOut, range: 0...3)
+            } header: {
+                Text("Fades")
+            } footer: {
+                Text("Picture and sound fade from / to black at the start and end of the export.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Remove silences & long pauses", isOn: $state.edit.removeSilences)
+                SecondsSlider(label: "Pause longer than", value: $state.edit.silenceThreshold, range: 0.3...2.0)
+                    .disabled(!state.edit.removeSilences)
                 Toggle("Remove filler words (um, uh…)", isOn: $state.edit.removeFillers)
                 Toggle("Auto zoom punch-ins", isOn: $state.edit.autoZoom)
             } header: {
@@ -412,17 +494,33 @@ struct EditPanel: View {
                 Text("Cuts and zooms are applied when you export the video; captions are re-timed to match.")
                     .foregroundStyle(.secondary)
             }
+        }
+        .formStyle(.grouped)
+    }
+}
 
+// MARK: - Audio
+
+struct AudioPanel: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        Form {
             Section {
+                LabeledSlider(label: "Voice volume", value: $state.edit.voiceVolume, range: 0...2)
+                Picker("Voice tone", selection: $state.edit.voiceEQ) {
+                    ForEach(VoiceEQ.allCases) { Text($0.rawValue).tag($0) }
+                }
                 Toggle("Clean up voice (hum & background noise)", isOn: $state.edit.cleanAudio)
                 Toggle("Even out loudness", isOn: $state.edit.normalizeLoudness)
             } header: {
-                Text("Audio")
+                Text("Voice")
             } footer: {
-                Text("Processed on your Mac when you export.").foregroundStyle(.secondary)
+                Text("Clear voice lifts presence for phone speakers; Podcast adds warmth and clarity; Radio gives a phone-call sound. Processed on your Mac when you export.")
+                    .foregroundStyle(.secondary)
             }
 
-            Section("Background music") {
+            Section {
                 HStack {
                     Text(state.edit.musicURL?.lastPathComponent ?? "No music")
                         .foregroundStyle(state.edit.musicURL == nil ? .secondary : .primary)
@@ -436,9 +534,43 @@ struct EditPanel: View {
                 }
                 LabeledSlider(label: "Music volume", value: $state.edit.musicVolume, range: 0.02...1)
                     .disabled(state.edit.musicURL == nil)
+                Toggle("Lower music while someone speaks", isOn: $state.edit.duckMusic)
+                    .disabled(state.edit.musicURL == nil)
+            } header: {
+                Text("Background music")
+            } footer: {
+                Text("Music loops to the video's length, ducks under speech and fades out at the end.")
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                SecondsSlider(label: "Fade in", value: $state.edit.fadeIn, range: 0...3)
+                SecondsSlider(label: "Fade out", value: $state.edit.fadeOut, range: 0...3)
+            } header: {
+                Text("Fades")
+            } footer: {
+                Text("Shared with the Video panel — sound and picture fade together.").foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// A slider showing seconds.
+struct SecondsSlider: View {
+    let label: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+
+    var body: some View {
+        HStack {
+            Text(label)
+            Slider(value: $value, in: range, step: 0.1)
+            Text(String(format: "%.1fs", value))
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .trailing)
+        }
     }
 }
 
@@ -505,10 +637,18 @@ struct LanguagePanel: View {
             }
 
             Section {
-                Text("Pick the spoken language under the video before generating captions. For Hindi/English mixed speech use Hinglish — Roman script; for mostly-English speech, English (India).")
+                TextField("Names & special words", text: $state.vocabularyText, axis: .vertical)
+                    .lineLimit(1...4)
+                if Transcriber.advancedModelAvailable {
+                    Toggle("Use Apple's newer speech model (macOS 26)", isOn: $state.useAdvancedSpeech)
+                }
+                Text("Pick the spoken language under the video before generating captions. For Hindi/English mixed speech use Hinglish — Roman script; for English, pick the accent you speak (English (India), English (US)…).")
                     .foregroundStyle(.secondary)
             } header: {
                 Text("Transcription")
+            } footer: {
+                Text("List names, brands and jargon separated by commas (e.g. Captionate, iPhone, Hormozi). They are given to the recogniser as hints and always spelled exactly as written. The newer model is more accurate on long English videos; Captionate falls back automatically when a language isn't supported.")
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
